@@ -15,7 +15,7 @@ import { env } from "@/env";
 import { GlobalProviders } from "@/providers/GlobalProviders";
 import { UTM } from "@/app/utm";
 import { startupImage } from "@/app/startup-image";
-import { Toaster } from "@/components/Toast";
+import { ThemedToaster } from "@/components/ThemedToaster";
 import { BRAND_ICON_URL, BRAND_NAME, toAbsoluteUrl } from "@/utils/branding";
 
 const aeonikFont = localFont({
@@ -72,10 +72,7 @@ const jsonLd: WithContext<WebApplication> = {
       "@type": "ImageObject",
       url: toAbsoluteUrl(BRAND_ICON_URL),
     },
-    sameAs: [
-      "https://x.com/inboxzero_ai",
-      "https://github.com/elie222/inbox-zero",
-    ],
+    sameAs: ["https://github.com/cdagesse/Zerrow"],
   },
 };
 
@@ -93,7 +90,6 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title,
     description,
-    creator: "@inboxzero_ai",
   },
   metadataBase: new URL(env.NEXT_PUBLIC_BASE_URL),
   // issues with robots.txt: https://github.com/vercel/next.js/issues/58615#issuecomment-1852457285
@@ -105,7 +101,7 @@ export const metadata: Metadata = {
   applicationName: BRAND_NAME,
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: BRAND_NAME,
     startupImage,
   },
@@ -116,12 +112,12 @@ export const metadata: Metadata = {
   other: {
     "mobile-web-app-capable": "yes",
     "apple-mobile-web-app-capable": "yes",
-    "apple-mobile-web-app-status-bar-style": "white-translucent",
+    "apple-mobile-web-app-status-bar-style": "black-translucent",
   },
 };
 
 export const viewport = {
-  themeColor: "#FFF",
+  themeColor: "#0A0E17",
 };
 
 export default async function RootLayout({
@@ -147,7 +143,7 @@ export default async function RootLayout({
           </Suspense>
           <GlobalProviders>
             {children}
-            <Toaster closeButton richColors theme="light" visibleToasts={9} />
+            <ThemedToaster closeButton richColors visibleToasts={9} />
           </GlobalProviders>
         </PostHogProvider>
         <Analytics />

@@ -12,7 +12,7 @@ import { SWRProvider } from "@/providers/SWRProvider";
 
 export function AppProviders(props: { children: React.ReactNode }) {
   return (
-    <ThemeProvider attribute="class" defaultTheme="light">
+    <ThemeProvider attribute="class" defaultTheme="dark">
       <Provider store={jotaiStore}>
         <EmailAccountProvider>
           <SWRProvider>

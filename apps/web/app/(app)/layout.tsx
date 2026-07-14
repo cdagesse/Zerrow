@@ -41,7 +41,7 @@ export const metadata: Metadata = {
 };
 
 export const viewport = {
-  themeColor: "#FFF",
+  themeColor: "#0A0E17",
   // safe area for iOS PWA
   userScalable: false,
   initialScale: 1,
