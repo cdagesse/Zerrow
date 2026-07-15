@@ -78,11 +78,12 @@ export function PlanBadge(props: { plan?: Plan; provider: string }) {
     >
       <Badge
         color={getPlanColor(plan, plan.status === ExecutedRuleStatus.APPLIED)}
+        className="min-w-0 max-w-full"
       >
         {plan.status === ExecutedRuleStatus.APPLIED && (
-          <CheckCircleIcon className="mr-2 h-3 w-3" />
+          <CheckCircleIcon className="mr-2 h-3 w-3 shrink-0" />
         )}
-        {plan.rule.name}
+        <span className="truncate">{plan.rule.name}</span>
       </Badge>
     </HoverCard>
   );

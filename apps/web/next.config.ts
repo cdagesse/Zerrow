@@ -129,7 +129,7 @@ const nextConfig: NextConfig = {
     return [
       {
         source: "/",
-        destination: "/automation",
+        destination: "/mail",
         has: [
           {
             type: "cookie",
@@ -140,7 +140,7 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/",
-        destination: "/setup",
+        destination: "/mail",
         has: [
           {
             type: "cookie",

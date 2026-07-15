@@ -129,7 +129,7 @@ export const OnboardingForm = (props: { questionIndex: number }) => {
         await completedOnboardingAction();
 
         if (isPremium) {
-          router.push("/setup");
+          router.push("/mail");
         } else {
           router.push("/welcome-upgrade");
         }

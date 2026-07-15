@@ -170,7 +170,7 @@ export const EmailListItem = forwardRef(
                 </div>
 
                 {!!thread.plan && (
-                  <div className="ml-3 flex items-center space-x-2 whitespace-nowrap">
+                  <div className="ml-3 flex min-w-0 max-w-[40vw] items-center md:max-w-56">
                     <PlanBadge plan={thread.plan} provider={provider} />
                   </div>
                 )}
