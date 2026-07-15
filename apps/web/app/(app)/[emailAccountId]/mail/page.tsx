@@ -40,9 +40,10 @@ export default function Mail(props: {
     return `/api/threads?${queryParams.toString()}`;
   };
 
+  // No keepPreviousData: switching folders should show a loader rather than
+  // the previous folder's emails; revisited folders load instantly from cache
   const { data, size, setSize, isLoading, error, mutate } =
     useSWRInfinite<ThreadsResponse>(getKey, {
-      keepPreviousData: true,
       dedupingInterval: 1000,
       revalidateOnFocus: false,
     });
@@ -101,6 +102,7 @@ export default function Mail(props: {
             emails={allThreads}
             refetch={refetch}
             type={searchParams.type}
+            labelId={searchParams.labelId}
             showLoadMore={showLoadMore}
             handleLoadMore={handleLoadMore}
             isLoadingMore={isLoadingMore}

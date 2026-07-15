@@ -300,6 +300,8 @@ export interface EmailProvider {
       subject?: string;
     },
   ): Promise<void>;
+  /** Show or hide a label in the provider's sidebar. Optional: not all providers support it. */
+  updateLabelVisibility?(labelId: string, visible: boolean): Promise<void>;
   watchEmails(): Promise<{
     expirationDate: Date;
     subscriptionId?: string;

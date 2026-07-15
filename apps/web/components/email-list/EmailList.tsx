@@ -15,6 +15,7 @@ import { Checkbox } from "@/components/Checkbox";
 import { MessageText } from "@/components/Typography";
 import { AlertBasic } from "@/components/Alert";
 import { EmailListItem } from "@/components/email-list/EmailListItem";
+import { FolderHeader } from "@/components/email-list/FolderSettings";
 import {
   ResizableHandle,
   ResizablePanel,
@@ -35,6 +36,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 export function List({
   emails,
   type,
+  labelId,
   refetch,
   showLoadMore,
   isLoadingMore,
@@ -42,6 +44,7 @@ export function List({
 }: {
   emails: Thread[];
   type?: string;
+  labelId?: string;
   refetch: (options?: { removedThreadIds?: string[] }) => void;
   showLoadMore?: boolean;
   isLoadingMore?: boolean;
@@ -95,9 +98,11 @@ export function List({
           />
         </div>
       )}
+      {type === "label" && labelId && <FolderHeader labelId={labelId} />}
       {emails.length ? (
         <EmailList
           threads={filteredEmails}
+          folderType={type}
           showLoadMore={showLoadMore}
           isLoadingMore={isLoadingMore}
           handleLoadMore={handleLoadMore}
@@ -146,6 +151,7 @@ export function List({
 
 export function EmailList({
   threads = [],
+  folderType,
   emptyMessage,
   hideActionBarWhenEmpty,
   refetch = () => {},
@@ -154,6 +160,7 @@ export function EmailList({
   handleLoadMore,
 }: {
   threads?: Thread[];
+  folderType?: string;
   emptyMessage?: React.ReactNode;
   hideActionBarWhenEmpty?: boolean;
   refetch?: (options?: { removedThreadIds?: string[] }) => void;
@@ -443,6 +450,7 @@ export function EmailList({
                       }}
                       userEmail={userEmail}
                       provider={provider}
+                      folderType={folderType}
                       thread={thread}
                       opened={openThreadId === thread.id}
                       closePanel={closePanel}
