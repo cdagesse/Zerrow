@@ -3,15 +3,18 @@ import prisma from "@/utils/prisma";
 import { withError } from "@/utils/middleware";
 import { SafeError } from "@/utils/error";
 import { auth } from "@/utils/auth";
+import { isAdmin } from "@/utils/admin";
 import { premiumEntitlementSelect } from "@/utils/premium";
 
 export type UserResponse = Awaited<ReturnType<typeof getUser>> | null;
 
 async function getUser({
   userId,
+  userEmail,
   includeImage,
 }: {
   userId: string;
+  userEmail?: string | null;
   includeImage: boolean;
 }) {
   const user = await prisma.user.findUnique({
@@ -86,6 +89,7 @@ async function getUser({
     hasAiApiKey: !!aiApiKey,
     hasWebhookSecret: !!webhookSecret,
     members,
+    isAdmin: !!isAdmin({ email: userEmail }),
   };
 }
 
@@ -103,7 +107,11 @@ export const GET = withError("user/me", async (request) => {
   const includeImage =
     request.nextUrl.searchParams.get("includeImage") === "true";
 
-  const user = await getUser({ userId, includeImage });
+  const user = await getUser({
+    userId,
+    userEmail: session?.user.email,
+    includeImage,
+  });
 
   return NextResponse.json(user);
 });

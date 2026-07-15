@@ -25,6 +25,7 @@ import {
   PersonStandingIcon,
   RatioIcon,
   SendIcon,
+  ShieldIcon,
   SparklesIcon,
   TagIcon,
   Users2Icon,
@@ -50,6 +51,7 @@ import { SetupProgressCard } from "@/components/SetupProgressCard";
 import { SideNavMenu } from "@/components/SideNavMenu";
 import { CommandShortcut } from "@/components/ui/command";
 import { useSplitLabels } from "@/hooks/useLabels";
+import { useUser } from "@/hooks/useUser";
 import { LoadingContent } from "@/components/LoadingContent";
 import {
   useCleanerEnabled,
@@ -78,6 +80,7 @@ export const useNavigation = () => {
   const showCleaner = useCleanerEnabled();
   const showMeetingBriefs = useMeetingBriefsEnabled();
   const showIntegrations = useIntegrationsEnabled();
+  const { data: user } = useUser();
 
   const { emailAccount, emailAccountId, provider } = useAccount();
   const currentEmailAccountId = emailAccount?.id || emailAccountId;
@@ -166,8 +169,17 @@ export const useNavigation = () => {
             },
           ]
         : []),
+      ...(user?.isAdmin
+        ? [
+            {
+              name: "Admin",
+              href: "/admin",
+              icon: ShieldIcon,
+            },
+          ]
+        : []),
     ],
-    [currentEmailAccountId, showMeetingBriefs, showIntegrations],
+    [currentEmailAccountId, showMeetingBriefs, showIntegrations, user],
   );
 
   return {
