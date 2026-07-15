@@ -25,7 +25,10 @@ export const GET = withEmailProvider(
     const { emailProvider } = request;
 
     try {
-      const labels = await emailProvider.getLabels();
+      // Include hidden labels: the client splits visible/hidden itself
+      // (useSplitLabels), and folder settings must still resolve a label
+      // after the user hides it.
+      const labels = await emailProvider.getLabels({ includeHidden: true });
       // Map to unified format
       const unifiedLabels: UnifiedLabel[] = (labels || []).map((label) => ({
         id: label.id,

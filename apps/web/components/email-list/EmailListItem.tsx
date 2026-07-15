@@ -25,6 +25,7 @@ export const EmailListItem = forwardRef(
     props: {
       userEmail: string;
       provider: string;
+      folderType?: string;
       thread: Thread;
       opened: boolean;
       selected: boolean;
@@ -40,7 +41,7 @@ export const EmailListItem = forwardRef(
   ) => {
     const { provider, thread, splitView, onSelected } = props;
 
-    const lastMessage = thread.messages?.[thread.messages.length - 1];
+    const lastMessage = getDisplayedMessage(thread, props.folderType);
 
     const isUnread = useMemo(
       () => lastMessage?.labelIds?.includes("UNREAD"),
@@ -206,3 +207,17 @@ export const EmailListItem = forwardRef(
 );
 
 EmailListItem.displayName = "EmailListItem";
+
+// In the Sent folder Gmail returns threads containing any sent message, so
+// the newest message is often the other person's reply. Show the user's own
+// last sent message there instead; participant() then shows the recipient.
+function getDisplayedMessage(thread: Thread, folderType?: string) {
+  const messages = thread.messages || [];
+  if (folderType === "sent") {
+    const lastSent = [...messages]
+      .reverse()
+      .find((message) => message.labelIds?.includes("SENT"));
+    if (lastSent) return lastSent;
+  }
+  return messages[messages.length - 1];
+}

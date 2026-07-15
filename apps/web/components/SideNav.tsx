@@ -5,22 +5,17 @@ import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getEmailTerminology } from "@/utils/terminology";
 import {
-  AlertCircleIcon,
   ArchiveIcon,
   ChevronDownIcon,
   ChevronRightIcon,
   FileIcon,
   InboxIcon,
   type LucideIcon,
-  MessagesSquareIcon,
   PenIcon,
-  PersonStandingIcon,
-  RatioIcon,
   SendIcon,
   SettingsIcon,
   ShieldIcon,
   TagIcon,
-  Users2Icon,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { useComposeModal } from "@/providers/ComposeModalProvider";
@@ -66,14 +61,6 @@ const mailFolders = [
   { name: "Drafts", icon: FileIcon, type: "draft" },
   { name: "Sent", icon: SendIcon, type: "sent" },
   { name: "Archived", icon: ArchiveIcon, type: "archive" },
-];
-
-const mailCategories = [
-  { name: "Personal", icon: PersonStandingIcon, type: "CATEGORY_PERSONAL" },
-  { name: "Social", icon: Users2Icon, type: "CATEGORY_SOCIAL" },
-  { name: "Updates", icon: AlertCircleIcon, type: "CATEGORY_UPDATES" },
-  { name: "Forums", icon: MessagesSquareIcon, type: "CATEGORY_FORUMS" },
-  { name: "Promotions", icon: RatioIcon, type: "CATEGORY_PROMOTIONS" },
 ];
 
 export function SideNav({ ...props }: React.ComponentProps<typeof Sidebar>) {
@@ -168,17 +155,6 @@ function MailNav({ path }: { path: string }) {
     [mailPath, isMailPage, currentType],
   );
 
-  const categoryItems = useMemo(
-    () =>
-      mailCategories.map((category) => ({
-        name: category.name,
-        icon: category.icon,
-        href: `${mailPath}?type=${category.type}`,
-        active: isMailPage && currentType === category.type,
-      })),
-    [mailPath, isMailPage, currentType],
-  );
-
   const toLabelNavItem = (label: {
     id?: string | null;
     name?: string | null;
@@ -213,10 +189,6 @@ function MailNav({ path }: { path: string }) {
 
       <SidebarGroup>
         <SideNavMenu items={folderItems} activeHref={path} />
-      </SidebarGroup>
-      <SidebarGroup>
-        <SidebarGroupLabel>Categories</SidebarGroupLabel>
-        <SideNavMenu items={categoryItems} activeHref={path} />
       </SidebarGroup>
 
       <SidebarGroup>

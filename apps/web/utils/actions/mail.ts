@@ -190,6 +190,25 @@ export const createLabelAction = actionClient
     },
   );
 
+export const updateLabelVisibilityAction = actionClient
+  .metadata({ name: "updateLabelVisibility" })
+  .inputSchema(z.object({ labelId: z.string(), visible: z.boolean() }))
+  .action(
+    async ({
+      ctx: { emailAccountId, provider, logger },
+      parsedInput: { labelId, visible },
+    }) => {
+      const emailProvider = await createEmailProvider({
+        emailAccountId,
+        provider,
+        logger,
+      });
+      if (!emailProvider.updateLabelVisibility)
+        throw new SafeError("Not supported for this email provider");
+      await emailProvider.updateLabelVisibility(labelId, visible);
+    },
+  );
+
 export const updateLabelsAction = actionClient
   .metadata({ name: "updateLabels" })
   .inputSchema(

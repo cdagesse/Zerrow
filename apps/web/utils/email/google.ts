@@ -1012,6 +1012,21 @@ export class GmailProvider implements EmailProvider {
     });
   }
 
+  async updateLabelVisibility(
+    labelId: string,
+    visible: boolean,
+  ): Promise<void> {
+    await this.client.users.labels.patch({
+      userId: "me",
+      id: labelId,
+      requestBody: {
+        labelListVisibility: visible
+          ? labelVisibility.labelShow
+          : labelVisibility.labelHide,
+      },
+    });
+  }
+
   async getOrCreateInboxZeroLabel(key: InboxZeroLabel): Promise<EmailLabel> {
     const label = await getOrCreateInboxZeroLabel({
       gmail: this.client,
