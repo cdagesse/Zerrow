@@ -6,6 +6,7 @@ import { useCallback, useMemo, useState } from "react";
 import {
   ChevronRightIcon,
   CreditCardIcon,
+  LayoutGridIcon,
   MailIcon,
   MessageCircleIcon,
   MessagesSquareIcon,
@@ -18,6 +19,7 @@ import {
 } from "lucide-react";
 import { ApiKeysSection } from "@/app/(app)/[emailAccountId]/settings/ApiKeysSection";
 import { AppearanceSection } from "@/app/(app)/settings/AppearanceSection";
+import { FeaturesSection } from "@/app/(app)/settings/FeaturesSection";
 import { TeamSection } from "@/app/(app)/settings/TeamSection";
 import { BillingSection } from "@/app/(app)/[emailAccountId]/settings/BillingSection";
 import { CleanupDraftsSection } from "@/app/(app)/[emailAccountId]/settings/CleanupDraftsSection";
@@ -85,6 +87,13 @@ export default function SettingsPage() {
     <div className="content-container pb-12">
       <div className="mx-auto max-w-5xl space-y-10 pt-4">
         <PageHeader title="Settings" />
+
+        <SettingsGroup
+          icon={<LayoutGridIcon className="size-5" />}
+          title="Features"
+        >
+          <FeaturesSection />
+        </SettingsGroup>
 
         <SettingsGroup
           icon={<MailIcon className="size-5" />}

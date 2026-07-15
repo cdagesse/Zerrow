@@ -38,7 +38,7 @@ export const GET = withAuth("stripe/success", async (request) => {
     request.nextUrl.searchParams.get("session_id");
 
   redirect(
-    buildRedirectUrl("/setup", {
+    buildRedirectUrl("/mail", {
       [CONVERSION_EVENT_PARAM]: "trial_started",
       [CONVERSION_EVENT_ID_PARAM]: stripeCheckoutSessionId ?? undefined,
     }),

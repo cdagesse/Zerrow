@@ -233,7 +233,7 @@ export function OnboardingContent({ step }: OnboardingContentProps) {
         return;
       }
       if (isPremium) {
-        router.push(prefixPath(emailAccountId, "/setup"));
+        router.push(prefixPath(emailAccountId, "/mail"));
       } else {
         router.push("/welcome-upgrade");
       }

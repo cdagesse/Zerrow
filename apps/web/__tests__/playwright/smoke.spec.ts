@@ -51,7 +51,7 @@ test("google emulator completes onboarding and reaches app pages", async ({
 
   await completeOnboardingFlow(page);
   await expect(page).toHaveURL(
-    /\/(?:welcome-upgrade|[a-z0-9]+\/setup)(?:\?.*)?$/,
+    /\/(?:welcome-upgrade|[a-z0-9]+\/mail)(?:\?.*)?$/,
   );
 });
 
