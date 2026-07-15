@@ -109,7 +109,7 @@ export const EmailListItem = forwardRef(
                   />
                 </div>
 
-                <div className="ml-4 w-48 min-w-0 overflow-hidden truncate text-foreground">
+                <div className="ml-4 min-w-0 flex-1 overflow-hidden truncate text-foreground md:w-48 md:flex-none">
                   {extractNameFromEmail(
                     participant(lastMessage, props.userEmail),
                   )}{" "}
@@ -125,7 +125,7 @@ export const EmailListItem = forwardRef(
                       <Button
                         variant="outline"
                         size="xs"
-                        className="ml-2"
+                        className="ml-2 hidden md:inline-flex"
                         asChild
                       >
                         <Link href={cta.ctaLink} target="_blank">
@@ -133,10 +133,10 @@ export const EmailListItem = forwardRef(
                         </Link>
                       </Button>
                     )}
-                    <div className="ml-2 min-w-0 overflow-hidden truncate text-foreground">
+                    <div className="ml-2 hidden min-w-0 overflow-hidden truncate text-foreground md:block">
                       {lastMessage.headers.subject}
                     </div>
-                    <div className="ml-4 mr-6 min-w-0 flex-1 overflow-hidden truncate font-normal leading-5 text-muted-foreground">
+                    <div className="ml-4 mr-6 hidden min-w-0 flex-1 overflow-hidden truncate font-normal leading-5 text-muted-foreground md:block">
                       {decodedSnippet}
                     </div>
                   </>
@@ -177,23 +177,27 @@ export const EmailListItem = forwardRef(
               </div>
             </div>
 
-            {splitView && (
-              <div className="mt-1.5 min-w-0 overflow-hidden text-sm leading-6">
-                <div className="min-w-0 overflow-hidden truncate font-medium text-foreground">
-                  {lastMessage.headers.subject}
-                </div>
-                <div className="mr-6 mt-0.5 min-w-0 overflow-hidden truncate pl-1 font-normal leading-5 text-muted-foreground">
-                  {decodedSnippet}
-                </div>
-                {cta && (
-                  <Button variant="outline" size="xs" className="mt-2" asChild>
-                    <Link href={cta.ctaLink} target="_blank">
-                      {cta.ctaText}
-                    </Link>
-                  </Button>
-                )}
+            {/* Stacked subject/snippet: always in split view, and on mobile where the inline layout doesn't fit */}
+            <div
+              className={clsx(
+                "mt-1.5 min-w-0 overflow-hidden text-sm leading-6",
+                !splitView && "md:hidden",
+              )}
+            >
+              <div className="min-w-0 overflow-hidden truncate font-medium text-foreground">
+                {lastMessage.headers.subject}
               </div>
-            )}
+              <div className="mr-6 mt-0.5 min-w-0 overflow-hidden truncate pl-1 font-normal leading-5 text-muted-foreground">
+                {decodedSnippet}
+              </div>
+              {cta && (
+                <Button variant="outline" size="xs" className="mt-2" asChild>
+                  <Link href={cta.ctaLink} target="_blank">
+                    {cta.ctaText}
+                  </Link>
+                </Button>
+              )}
+            </div>
           </div>
         </li>
       </ErrorBoundary>
