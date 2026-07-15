@@ -89,11 +89,11 @@ export default function Mail(props: {
   }, [setSize]);
 
   return (
-    // Fixed viewport height (minus the pt-9 top bar) with internal list
-    // scrolling: keeps mobile browsers from scrolling the document past the
-    // end of the list (iOS URL-bar/rubber-band quirks) and matches how the
-    // list's scroll logic expects to work.
-    <div className="flex h-[calc(100svh-2.25rem)] flex-col overflow-hidden">
+    // Pin the mail view to the visible screen with internal list scrolling.
+    // On mobile use fixed positioning (tracks the real visual viewport even
+    // under iOS Safari page zoom, where svh/vh units over-report height);
+    // on desktop a viewport-unit height is reliable and respects the sidebar.
+    <div className="flex flex-col overflow-hidden max-md:fixed max-md:inset-x-0 max-md:top-9 max-md:bottom-0 md:h-[calc(100svh-2.25rem)]">
       <PermissionsCheck />
       <LoadingContent loading={isLoading && !data} error={error}>
         {allThreads && (

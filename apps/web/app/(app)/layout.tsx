@@ -78,8 +78,8 @@ export default async function AppLayout({
   });
 
   return (
-    <div className={inter.variable}>
-      <div className="font-inter">
+    <div className={`h-full ${inter.variable}`}>
+      <div className="h-full font-inter">
         <AppProviders>
           <SideNavWithTopNav defaultOpen={!isClosed}>
             <AiAutomationStatusBanner />
