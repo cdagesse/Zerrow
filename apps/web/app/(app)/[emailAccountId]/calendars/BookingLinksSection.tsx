@@ -274,7 +274,7 @@ function EmptyLinkCard({ onCreate }: { onCreate: () => void }) {
     <CardBasic className="px-4 py-4">
       <div className="mb-1 flex items-center gap-2">
         <h3 className="font-medium">Booking link</h3>
-        <span className="rounded-md border border-blue-200 bg-blue-50 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-blue-600 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-400">
+        <span className="rounded-md border border-primary/30 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
           New
         </span>
       </div>

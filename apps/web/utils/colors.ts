@@ -24,7 +24,7 @@ export function getRandomColor() {
 
 export const COLORS = {
   analytics: {
-    blue: "#006EFF80",
+    blue: "hsl(var(--primary) / 0.6)",
     purple: "#6410FF80",
     pink: "#C942B2",
     lightPink: "#C942B260",

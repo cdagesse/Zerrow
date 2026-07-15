@@ -12,7 +12,7 @@ export function OnboardingButton({
   return (
     <button
       type="button"
-      className="rounded-xl border bg-card p-4 text-card-foreground shadow-sm text-left flex items-center gap-4 transition-all hover:border-blue-600 hover:ring-2 hover:ring-blue-100"
+      className="rounded-xl border bg-card p-4 text-card-foreground shadow-sm text-left flex items-center gap-4 transition-all hover:border-primary hover:ring-2 hover:ring-primary/20"
       onClick={onClick}
     >
       <IconCircle size="sm">{icon}</IconCircle>

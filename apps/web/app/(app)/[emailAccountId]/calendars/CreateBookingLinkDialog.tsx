@@ -138,7 +138,7 @@ export function CreateBookingLinkDialog({
 
               <div>
                 <Label name="duration" label="Duration" />
-                <div className="mt-1 grid grid-cols-4 gap-2">
+                <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {DURATION_OPTIONS.map((option) => {
                     const active = option === duration;
                     return (

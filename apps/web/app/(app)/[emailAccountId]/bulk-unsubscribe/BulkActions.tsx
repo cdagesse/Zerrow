@@ -71,7 +71,7 @@ function ActionButton({
       title={label}
       className={cn(
         "flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg transition-colors whitespace-nowrap",
-        "text-gray-600 hover:bg-gray-100 hover:text-gray-900",
+        "text-muted-foreground hover:bg-accent hover:text-accent-foreground",
         danger && "hover:text-red-600",
         loading && "opacity-50 cursor-not-allowed",
       )}
@@ -228,7 +228,7 @@ export function BulkActions({
               showTooltip={!hasUnsubscribeAccess}
               openModal={openModal}
             >
-              <div className="mt-4 bg-gray-50 border border-gray-200 rounded-lg px-2 sm:px-3 py-2 flex items-center justify-between gap-1 sm:gap-3">
+              <div className="mt-4 bg-muted border border-border rounded-lg px-2 sm:px-3 py-2 flex items-center justify-between gap-1 sm:gap-3">
                 {/* Left side: Close button and selection count */}
                 <div className="flex items-center gap-1 sm:gap-3 shrink-0">
                   <button

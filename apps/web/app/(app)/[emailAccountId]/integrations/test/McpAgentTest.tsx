@@ -102,7 +102,7 @@ export function McpAgentTest() {
         {result?.data && (
           <div className="space-y-4">
             {result.data.response ? (
-              <div className="border rounded-lg p-4 bg-gray-50">
+              <div className="border rounded-lg p-4 bg-muted">
                 <h4 className="font-semibold mb-2">Response:</h4>
                 <p className="whitespace-pre-wrap">{result.data.response}</p>
               </div>
@@ -123,11 +123,8 @@ export function McpAgentTest() {
                 <h4 className="font-semibold mb-2">Tool Calls Made:</h4>
                 <div className="space-y-2">
                   {result.data.toolCalls.map((call, index) => (
-                    <div
-                      key={index}
-                      className="text-sm bg-gray-100 p-2 rounded"
-                    >
-                      <div className="font-mono text-blue-600">
+                    <div key={index} className="text-sm bg-muted p-2 rounded">
+                      <div className="font-mono text-primary">
                         {call.toolName}
                       </div>
                       <div className="text-gray-600">

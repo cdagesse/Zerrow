@@ -39,7 +39,7 @@ export function Tabs(props: TabsProps) {
         <select
           id="tabs"
           name="tabs"
-          className="block w-full rounded-md border-gray-300 focus:border-blue-500 focus:ring-blue-500"
+          className="block w-full rounded-md border-input bg-background focus:border-ring focus:ring-ring"
           defaultValue={selected}
           onChange={(e) => {
             const label = e.target.value;
@@ -77,8 +77,8 @@ export function Tabs(props: TabsProps) {
                 className={clsx(
                   "whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium",
                   isSelected
-                    ? "bg-blue-100 text-blue-700"
-                    : "text-muted-foreground hover:text-gray-700",
+                    ? "bg-primary/10 text-primary"
+                    : "text-muted-foreground hover:text-foreground",
                 )}
                 aria-current={isSelected ? "page" : undefined}
                 onClick={onClickTab ? () => onClickTab(tab) : undefined}

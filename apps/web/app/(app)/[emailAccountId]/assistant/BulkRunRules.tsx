@@ -169,7 +169,7 @@ export function BulkRunRules() {
             <div className="flex min-w-0 flex-col space-y-4 overflow-hidden">
               <PremiumAlertWithData className="mr-auto" />
 
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <SetDateDropdown
                   onChange={(date) => {
                     setStartDate(date);

@@ -211,7 +211,7 @@ export function StepBulkUnsubscribe({ onNext }: { onNext: () => void }) {
   const hasMore = suggestions.length > previewSenders.length;
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center bg-slate-50 px-4 py-10">
+    <div className="flex min-h-svh flex-col items-center justify-center bg-background px-4 py-10">
       <div className="w-full max-w-xl">
         <div className="mb-6 text-center">
           <PageHeading className="mb-3">
@@ -226,7 +226,7 @@ export function StepBulkUnsubscribe({ onNext }: { onNext: () => void }) {
 
         <section
           aria-label="Senders you rarely read"
-          className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+          className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
         >
           <ul className="divide-y divide-slate-100 py-1.5">
             {previewSenders.map((item) => (
@@ -286,7 +286,7 @@ export function StepBulkUnsubscribe({ onNext }: { onNext: () => void }) {
 
 function StaticBulkUnsubscribeStep({ onNext }: { onNext: () => void }) {
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center bg-slate-50 px-4 py-8">
+    <div className="flex min-h-svh flex-col items-center justify-center bg-background px-4 py-8">
       <div className="flex flex-col items-center text-center max-w-md">
         <div className="mb-6 h-[240px] flex items-end justify-center">
           <BulkUnsubscribeIllustration />

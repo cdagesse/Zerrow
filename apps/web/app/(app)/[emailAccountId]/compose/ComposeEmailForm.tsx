@@ -201,7 +201,7 @@ export const ComposeEmailForm = ({
                 onChange={handleComboboxOnChange}
                 multiple
               >
-                <div className="flex min-h-10 w-full flex-1 flex-wrap items-center gap-1.5 rounded-md text-sm disabled:cursor-not-allowed disabled:bg-slate-50 disabled:text-muted-foreground">
+                <div className="flex min-h-10 w-full flex-1 flex-wrap items-center gap-1.5 rounded-md text-sm disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground">
                   {selectedEmailAddressses.map((emailAddress) => (
                     <Badge
                       key={emailAddress}
@@ -323,7 +323,7 @@ export const ComposeEmailForm = ({
             registerProps={register("subject", { required: true })}
             error={errors.subject}
             placeholder="Subject"
-            className="border border-input bg-background focus:border-slate-200 focus:ring-0 focus:ring-slate-200"
+            className="border border-input bg-background focus:border-ring focus:ring-0 focus:ring-ring"
           />
         </>
       )}
