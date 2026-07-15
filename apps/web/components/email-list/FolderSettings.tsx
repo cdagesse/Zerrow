@@ -139,7 +139,7 @@ function VisibilitySetting({
         mutateLabels();
       },
       onError: (error) => {
-        toastError(getActionErrorMessage(error.error));
+        toastError({ description: getActionErrorMessage(error.error) });
       },
     },
   );
@@ -188,7 +188,7 @@ function AiLabelSetting({
         mutateDbLabels();
       },
       onError: (error) => {
-        toastError(getActionErrorMessage(error.error));
+        toastError({ description: getActionErrorMessage(error.error) });
       },
     },
   );
