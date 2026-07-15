@@ -91,7 +91,6 @@ export const useNavigation = () => {
         name: "Inbox",
         href: prefixPath(currentEmailAccountId, "/mail"),
         icon: InboxIcon,
-        beta: true,
       },
       {
         name: "Chat",

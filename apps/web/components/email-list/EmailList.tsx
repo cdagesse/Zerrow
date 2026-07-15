@@ -506,8 +506,12 @@ function ResizeGroup({
 
   if (!right) return left;
 
+  // On mobile a split view leaves both halves cramped; show the open thread
+  // full-screen instead. Its close button returns to the list.
+  if (isMobile) return <div className="h-full overflow-y-auto">{right}</div>;
+
   return (
-    <ResizablePanelGroup direction={isMobile ? "vertical" : "horizontal"}>
+    <ResizablePanelGroup direction="horizontal">
       <ResizablePanel
         style={{ overflow: "auto" }}
         defaultSize={50}
