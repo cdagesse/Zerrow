@@ -89,7 +89,11 @@ export default function Mail(props: {
   }, [setSize]);
 
   return (
-    <>
+    // Fixed viewport height (minus the pt-9 top bar) with internal list
+    // scrolling: keeps mobile browsers from scrolling the document past the
+    // end of the list (iOS URL-bar/rubber-band quirks) and matches how the
+    // list's scroll logic expects to work.
+    <div className="flex h-[calc(100svh-2.25rem)] flex-col overflow-hidden">
       <PermissionsCheck />
       <LoadingContent loading={isLoading && !data} error={error}>
         {allThreads && (
@@ -103,6 +107,6 @@ export default function Mail(props: {
           />
         )}
       </LoadingContent>
-    </>
+    </div>
   );
 }

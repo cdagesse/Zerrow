@@ -409,87 +409,89 @@ export function EmailList({
           )}
         </div>
       ) : (
-        <ResizeGroup
-          left={
-            <ul
-              className="min-w-0 divide-y divide-border overflow-x-hidden overflow-y-auto scroll-smooth"
-              ref={listRef}
-            >
-              {threads.map((thread) => {
-                const onOpen = () => {
-                  const alreadyOpen = !!openThreadId;
-                  setOpenThreadId(thread.id);
+        <div className="min-h-0 flex-1 overflow-hidden">
+          <ResizeGroup
+            left={
+              <ul
+                className="h-full min-w-0 divide-y divide-border overflow-x-hidden overflow-y-auto scroll-smooth"
+                ref={listRef}
+              >
+                {threads.map((thread) => {
+                  const onOpen = () => {
+                    const alreadyOpen = !!openThreadId;
+                    setOpenThreadId(thread.id);
 
-                  if (!alreadyOpen) scrollToId(thread.id);
+                    if (!alreadyOpen) scrollToId(thread.id);
 
-                  markReadThreads({
-                    threadIds: [thread.id],
-                    onSuccess: () => refetch(),
-                    emailAccountId,
-                  });
-                };
+                    markReadThreads({
+                      threadIds: [thread.id],
+                      onSuccess: () => refetch(),
+                      emailAccountId,
+                    });
+                  };
 
-                return (
-                  <EmailListItem
-                    key={thread.id}
-                    ref={(node) => {
-                      const map = getMap();
-                      if (node) {
-                        map.set(thread.id, node);
-                      } else {
-                        map.delete(thread.id);
-                      }
-                    }}
-                    userEmail={userEmail}
-                    provider={provider}
-                    thread={thread}
-                    opened={openThreadId === thread.id}
-                    closePanel={closePanel}
-                    selected={selectedRows[thread.id]}
-                    onSelected={onSetSelectedRow}
-                    splitView={!!openThreadId}
-                    onClick={onOpen}
-                    onPlanAiAction={onPlanAiAction}
-                    onArchive={onArchive}
-                    refetch={refetch}
-                  />
-                );
-              })}
-              {showLoadMore && (
-                <Button
-                  variant="outline"
-                  className="mb-2 w-full"
-                  size={"sm"}
-                  onClick={handleLoadMore}
-                  disabled={isLoadingMore}
-                >
-                  {
-                    <>
-                      {isLoadingMore ? (
-                        <ButtonLoader />
-                      ) : (
-                        <ChevronsDownIcon className="mr-2 h-4 w-4" />
-                      )}
-                      <span>Load more</span>
-                    </>
-                  }
-                </Button>
-              )}
-            </ul>
-          }
-          right={
-            !!(openThreadId && openedRow) && (
-              <EmailPanel
-                row={openedRow}
-                onPlanAiAction={onPlanAiAction}
-                onArchive={onArchive}
-                advanceToAdjacentThread={advanceToAdjacentThread}
-                close={closePanel}
-                refetch={refetch}
-              />
-            )
-          }
-        />
+                  return (
+                    <EmailListItem
+                      key={thread.id}
+                      ref={(node) => {
+                        const map = getMap();
+                        if (node) {
+                          map.set(thread.id, node);
+                        } else {
+                          map.delete(thread.id);
+                        }
+                      }}
+                      userEmail={userEmail}
+                      provider={provider}
+                      thread={thread}
+                      opened={openThreadId === thread.id}
+                      closePanel={closePanel}
+                      selected={selectedRows[thread.id]}
+                      onSelected={onSetSelectedRow}
+                      splitView={!!openThreadId}
+                      onClick={onOpen}
+                      onPlanAiAction={onPlanAiAction}
+                      onArchive={onArchive}
+                      refetch={refetch}
+                    />
+                  );
+                })}
+                {showLoadMore && (
+                  <Button
+                    variant="outline"
+                    className="mb-2 w-full"
+                    size={"sm"}
+                    onClick={handleLoadMore}
+                    disabled={isLoadingMore}
+                  >
+                    {
+                      <>
+                        {isLoadingMore ? (
+                          <ButtonLoader />
+                        ) : (
+                          <ChevronsDownIcon className="mr-2 h-4 w-4" />
+                        )}
+                        <span>Load more</span>
+                      </>
+                    }
+                  </Button>
+                )}
+              </ul>
+            }
+            right={
+              !!(openThreadId && openedRow) && (
+                <EmailPanel
+                  row={openedRow}
+                  onPlanAiAction={onPlanAiAction}
+                  onArchive={onArchive}
+                  advanceToAdjacentThread={advanceToAdjacentThread}
+                  close={closePanel}
+                  refetch={refetch}
+                />
+              )
+            }
+          />
+        </div>
       )}
     </>
   );
