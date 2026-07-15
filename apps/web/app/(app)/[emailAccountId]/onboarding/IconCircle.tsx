@@ -15,7 +15,7 @@ const iconVariants = cva("relative flex items-center justify-center", {
 });
 
 const innerVariants = cva(
-  "relative flex items-center justify-center rounded-full bg-white shadow-sm",
+  "relative flex items-center justify-center rounded-full bg-card shadow-sm",
   {
     variants: {
       size: {

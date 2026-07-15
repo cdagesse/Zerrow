@@ -31,7 +31,7 @@ export const UnsubscribeShareCard = forwardRef<
     <div
       ref={ref}
       className={cn(
-        "relative isolate overflow-hidden rounded-2xl bg-gradient-to-br from-blue-600 via-blue-700 to-indigo-800 px-7 py-8 text-white shadow-lg",
+        "relative isolate overflow-hidden rounded-2xl bg-gradient-to-br from-primary via-primary/90 to-primary/70 px-7 py-8 text-primary-foreground shadow-lg",
         className,
       )}
     >

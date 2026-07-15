@@ -417,7 +417,7 @@ function EmailPreview({
   return (
     <div>
       <Label>Preview</Label>
-      <div className="mt-3 border rounded-lg overflow-hidden bg-slate-50">
+      <div className="mt-3 border rounded-lg overflow-hidden bg-muted">
         {selectedDigestNames.length > 0 && htmlContent ? (
           <iframe
             title="Digest preview"

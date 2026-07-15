@@ -8,17 +8,17 @@ import { ConnectCalendar } from "@/app/(app)/[emailAccountId]/calendars/ConnectC
 
 const features = [
   {
-    icon: <UserSearchIcon className="size-4 text-blue-500" />,
+    icon: <UserSearchIcon className="size-4 text-primary" />,
     title: "Attendee research",
     description: "Who they are, their company, and role",
   },
   {
-    icon: <MailIcon className="size-4 text-blue-500" />,
+    icon: <MailIcon className="size-4 text-primary" />,
     title: "Email history",
     description: "Recent conversations with this person",
   },
   {
-    icon: <LightbulbIcon className="size-4 text-blue-500" />,
+    icon: <LightbulbIcon className="size-4 text-primary" />,
     title: "Key context",
     description: "Important details from past discussions",
   },

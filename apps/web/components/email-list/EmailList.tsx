@@ -85,7 +85,7 @@ export function List({
   return (
     <>
       {showTabs && (
-        <div className="border-b border-gray-200">
+        <div className="border-b border-border">
           <GroupHeading
             leftContent={
               <div className="overflow-x-auto py-2 md:max-w-lg lg:max-w-xl xl:max-w-3xl 2xl:max-w-4xl">

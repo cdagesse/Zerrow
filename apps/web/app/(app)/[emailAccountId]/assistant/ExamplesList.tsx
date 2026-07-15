@@ -78,7 +78,7 @@ function PureExamplesGrid({
   const examplePrompts = getExamplePrompts(provider, examples);
 
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
       {examplePrompts.map((example) => {
         const actionType = getActionType(example);
         const Icon = actionType ? getActionIcon(actionType) : null;

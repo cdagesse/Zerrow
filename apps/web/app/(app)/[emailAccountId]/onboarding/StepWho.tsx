@@ -190,7 +190,7 @@ export function StepWho({
                     className={cn(
                       "rounded-xl border bg-card p-4 text-card-foreground shadow-sm text-left flex items-center gap-4 transition-all",
                       watchedRole === roleName &&
-                        "border-blue-600 ring-2 ring-blue-100",
+                        "border-primary ring-2 ring-primary/20",
                     )}
                     onClick={() => {
                       setValue("role", roleName);
@@ -224,7 +224,7 @@ export function StepWho({
                     setCustomRole(e.target.value),
                   autoFocus: true,
                 }}
-                className="w-full border-slate-300 focus:border-blue-600 focus:ring-blue-600 transition-all py-3 px-4 text-lg"
+                className="w-full border-input focus:border-primary focus:ring-primary transition-all py-3 px-4 text-lg"
               />
             </div>
           )}

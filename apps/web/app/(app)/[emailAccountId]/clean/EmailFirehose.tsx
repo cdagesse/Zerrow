@@ -155,9 +155,9 @@ export function EmailFirehose({
           <button
             type="button"
             onClick={() => setFilter(filter === "keep" ? null : "keep")}
-            className={`flex items-center ${filter === "keep" ? "rounded-md bg-blue-100 px-2 py-1 dark:bg-blue-900/30" : "hover:underline"}`}
+            className={`flex items-center ${filter === "keep" ? "rounded-md bg-primary/15 px-2 py-1" : "hover:underline"}`}
           >
-            <div className="mr-1 size-3 rounded-full bg-blue-500" />
+            <div className="mr-1 size-3 rounded-full bg-primary" />
             <span>Keep</span>
             {filter === "keep" && (
               <XCircle className="ml-1 size-3 text-muted-foreground" />

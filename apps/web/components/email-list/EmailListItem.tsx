@@ -72,8 +72,8 @@ export const EmailListItem = forwardRef(
           className={clsx("group relative cursor-pointer border-l-4 py-3", {
             "hover:bg-slate-50 dark:hover:bg-slate-950":
               !props.selected && !props.opened,
-            "bg-blue-50 dark:bg-blue-950": props.selected,
-            "bg-blue-100 dark:bg-blue-900": props.opened,
+            "bg-primary/10": props.selected,
+            "bg-primary/20": props.opened,
             "bg-slate-100 dark:bg-background":
               !isUnread && !props.selected && !props.opened,
           })}

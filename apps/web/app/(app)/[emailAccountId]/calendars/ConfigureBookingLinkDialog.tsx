@@ -133,7 +133,7 @@ function TabButton({
       className={cn(
         "-mb-px border-b-2 px-3 py-3 text-sm font-medium transition-colors",
         active
-          ? "border-blue-600 text-foreground"
+          ? "border-primary text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground",
       )}
     >
@@ -273,7 +273,7 @@ function GeneralTab({
 
         <div>
           <Label name="duration" label="Duration" />
-          <div className="mt-1 grid grid-cols-4 gap-2">
+          <div className="mt-1 grid grid-cols-2 gap-2 sm:grid-cols-4">
             {DURATION_OPTIONS.map((option) => {
               const active = option === duration;
               return (

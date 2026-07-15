@@ -106,7 +106,7 @@ export function StepSendTestBrief({ onNext }: { onNext: () => void }) {
                     onClick={() => setSelectedEventId(event.id)}
                     className={cn(
                       "flex items-center justify-between gap-4 rounded-xl border bg-card p-4 text-left transition-all hover:border-border/80 hover:translate-x-1",
-                      isSelected && "border-blue-600 ring-2 ring-blue-100",
+                      isSelected && "border-primary ring-2 ring-primary/20",
                     )}
                   >
                     <div className="flex min-w-0 items-center gap-3">
@@ -114,7 +114,7 @@ export function StepSendTestBrief({ onNext }: { onNext: () => void }) {
                         className={cn(
                           "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg transition-colors",
                           isSelected
-                            ? "bg-blue-600 text-white"
+                            ? "bg-primary text-primary-foreground"
                             : "bg-muted text-muted-foreground",
                         )}
                       >
@@ -137,7 +137,7 @@ export function StepSendTestBrief({ onNext }: { onNext: () => void }) {
                       className={cn(
                         "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors",
                         isSelected
-                          ? "border-blue-600 bg-blue-600"
+                          ? "border-primary bg-primary"
                           : "border-muted-foreground/30",
                       )}
                     >

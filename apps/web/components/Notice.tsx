@@ -7,7 +7,7 @@ interface NoticeProps {
 }
 
 const variantStyles = {
-  info: "text-blue-600 bg-blue-50 border-blue-100",
+  info: "text-primary bg-primary/10 border-primary/20",
   warning: "text-amber-600 bg-amber-50 border-amber-100",
   success: "text-green-600 bg-green-50 border-green-100",
   error: "text-red-600 bg-red-50 border-red-100",

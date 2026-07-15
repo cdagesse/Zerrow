@@ -62,7 +62,7 @@ export function StepInboxProcessed({ onNext }: { onNext: () => void }) {
   }, [error]);
 
   return (
-    <div className="flex min-h-svh flex-col items-center justify-center bg-slate-50 px-4 py-10">
+    <div className="flex min-h-svh flex-col items-center justify-center bg-background px-4 py-10">
       <StepInboxProcessedView
         data={data}
         isLoading={isLoading}
@@ -143,7 +143,7 @@ function InboxPreview({
   return (
     <section
       aria-label="Recently organized emails"
-      className="relative overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+      className="relative overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
     >
       <div
         className="max-h-[300px] overflow-y-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
@@ -206,7 +206,7 @@ function InboxPreviewSkeleton() {
   return (
     <section
       aria-label="Loading recently organized emails"
-      className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm"
+      className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
     >
       <ul className="divide-y divide-slate-100 py-3.5">
         {Array.from({ length: 5 }).map((_, i) => (

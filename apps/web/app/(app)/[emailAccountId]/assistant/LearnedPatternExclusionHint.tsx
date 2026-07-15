@@ -21,7 +21,7 @@ export function LearnedPatternExclusionHint({
     <div className={cn("text-sm text-muted-foreground", className)}>
       Some rules were excluded by learned patterns.{" "}
       <HoverCard
-        className="w-96"
+        className="w-[calc(100vw-2rem)] sm:w-96"
         content={
           <div className="space-y-3 text-sm">
             {uniqueGroups.map((group) => (

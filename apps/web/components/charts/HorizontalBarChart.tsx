@@ -34,7 +34,7 @@ export function HorizontalBarChart({
             <div className="flex-1 min-w-0">
               <div className="px-3 py-2 relative">
                 <div
-                  className="absolute top-0 left-0 bg-gradient-to-r h-full rounded-md from-blue-100 to-blue-50 dark:from-blue-500 dark:to-blue-500/80"
+                  className="absolute top-0 left-0 bg-gradient-to-r h-full rounded-md from-primary/25 to-primary/10 dark:from-primary dark:to-primary/80"
                   style={{ width: `${widthPercentage}%` }}
                 />
                 <div className="flex items-center gap-2">
