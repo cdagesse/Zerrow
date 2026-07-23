@@ -3,6 +3,8 @@
 import { useMemo, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import useSWR from "swr";
+import type { LabelCountsResponse } from "@/app/api/labels/counts/route";
 import { getEmailTerminology } from "@/utils/terminology";
 import {
   ArchiveIcon,
@@ -50,6 +52,7 @@ type NavItem = {
   href: string;
   icon: LucideIcon | (() => React.ReactNode);
   target?: "_blank";
+  count?: number;
   active?: boolean;
   beta?: boolean;
   new?: boolean;
@@ -134,6 +137,11 @@ function MailNav({ path }: { path: string }) {
   const { emailAccountId, provider } = useAccount();
   const searchParams = useSearchParams();
   const terminology = getEmailTerminology(provider);
+  const { data: countsData } = useSWR<LabelCountsResponse>(
+    "/api/labels/counts",
+    { refreshInterval: 60_000, revalidateOnFocus: false },
+  );
+  const counts = countsData?.counts;
 
   const isMailPage = path.includes("/mail");
   const currentType = searchParams.get("type");
@@ -146,12 +154,13 @@ function MailNav({ path }: { path: string }) {
         name: folder.name,
         icon: folder.icon,
         href: `${mailPath}?type=${folder.type}`,
+        count: folder.type === "inbox" ? counts?.INBOX : undefined,
         active:
           isMailPage &&
           (currentType === folder.type ||
             (folder.type === "inbox" && !currentType)),
       })),
-    [mailPath, isMailPage, currentType],
+    [mailPath, isMailPage, currentType, counts],
   );
 
   const toLabelNavItem = (label: {
@@ -161,6 +170,7 @@ function MailNav({ path }: { path: string }) {
     name: label.name ?? "",
     icon: TagIcon,
     href: `${mailPath}?type=label&labelId=${encodeURIComponent(label.id ?? "")}`,
+    count: label.id ? counts?.[label.id] : undefined,
     active:
       isMailPage && currentType === "label" && currentLabelId === label.id,
   });

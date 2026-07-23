@@ -70,9 +70,14 @@ export const ComposeEmailForm = ({
       subject: replyingToEmail?.subject,
       to: replyingToEmail?.to,
       cc: replyingToEmail?.cc,
+      bcc: replyingToEmail?.bcc,
       messageHtml: replyingToEmail?.draftHtml,
     },
   });
+
+  const [showCcBcc, setShowCcBcc] = useState(
+    Boolean(replyingToEmail?.cc || replyingToEmail?.bcc),
+  );
 
   const onSubmit: SubmitHandler<SendEmailBody> = useCallback(
     async (data) => {
@@ -315,6 +320,33 @@ export const ComposeEmailForm = ({
               registerProps={register("to", { required: true })}
               error={errors.to}
             />
+          )}
+
+          {showCcBcc ? (
+            <>
+              <Input
+                type="text"
+                name="cc"
+                label="Cc"
+                registerProps={register("cc")}
+                error={errors.cc}
+              />
+              <Input
+                type="text"
+                name="bcc"
+                label="Bcc"
+                registerProps={register("bcc")}
+                error={errors.bcc}
+              />
+            </>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setShowCcBcc(true)}
+              className="text-xs text-muted-foreground hover:text-foreground"
+            >
+              Add Cc/Bcc
+            </button>
           )}
 
           <Input

@@ -211,6 +211,8 @@ export interface EmailProvider {
     threads: EmailThread[];
     nextPageToken?: string;
   }>;
+  /** Unread thread counts per label id. Optional: powers sidebar badges. */
+  getUnreadCounts?(labelIds: string[]): Promise<Record<string, number>>;
   hasPreviousCommunicationsWithSenderOrDomain(options: {
     from: string;
     date: Date;

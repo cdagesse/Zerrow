@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState, useMemo } from "react";
 import { useQueryState } from "nuqs";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import Link from "next/link";
 import { toast } from "sonner";
 import { ChevronsDownIcon } from "lucide-react";
@@ -274,32 +275,24 @@ export function EmailList({
     [refetch, emailAccountId, undoSupported, undoArchive],
   );
 
-  const listRef = useRef<HTMLUListElement>(null);
-  const itemsRef = useRef<Map<string, HTMLLIElement> | null>(null);
+  const listRef = useRef<HTMLDivElement>(null);
 
-  // https://react.dev/learn/manipulating-the-dom-with-refs#how-to-manage-a-list-of-refs-using-a-ref-callback
-  function getMap() {
-    if (!itemsRef.current) {
-      // Initialize the Map on first usage.
-      itemsRef.current = new Map();
-    }
-    return itemsRef.current;
-  }
+  const virtualizer = useVirtualizer<HTMLDivElement, HTMLLIElement>({
+    count: threads.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 76,
+    overscan: 10,
+    getItemKey: (index) => threads[index].id,
+  });
 
   // to scroll to a row when the side panel is opened
-  function scrollToId(threadId: string) {
-    const map = getMap();
-    const node = map.get(threadId);
+  function scrollToThread(threadId: string) {
+    const index = threads.findIndex((thread) => thread.id === threadId);
+    if (index === -1) return;
 
     // let the panel open first
     setTimeout(() => {
-      if (listRef.current && node) {
-        // Calculate the position of the item relative to the container
-        const topPos = node.offsetTop - 117;
-
-        // Scroll the container to the item
-        listRef.current.scrollTop = topPos;
-      }
+      virtualizer.scrollToIndex(index, { align: "start" });
     }, 100);
   }
 
@@ -448,51 +441,59 @@ export function EmailList({
         <div className="min-h-0 flex-1 overflow-hidden">
           <ResizeGroup
             left={
-              <ul
-                className="h-full min-w-0 divide-y divide-border overflow-x-hidden overflow-y-auto scroll-smooth"
+              <div
+                className="h-full min-w-0 overflow-x-hidden overflow-y-auto scroll-smooth"
                 ref={listRef}
               >
-                {threads.map((thread) => {
-                  const onOpen = () => {
-                    const alreadyOpen = !!openThreadId;
-                    setOpenThreadId(thread.id);
+                <ul
+                  className="relative w-full"
+                  style={{ height: virtualizer.getTotalSize() }}
+                >
+                  {virtualizer.getVirtualItems().map((virtualRow) => {
+                    const thread = threads[virtualRow.index];
 
-                    if (!alreadyOpen) scrollToId(thread.id);
+                    const onOpen = () => {
+                      const alreadyOpen = !!openThreadId;
+                      setOpenThreadId(thread.id);
 
-                    markReadThreads({
-                      threadIds: [thread.id],
-                      onSuccess: () => refetch(),
-                      emailAccountId,
-                    });
-                  };
+                      if (!alreadyOpen) scrollToThread(thread.id);
 
-                  return (
-                    <EmailListItem
-                      key={thread.id}
-                      ref={(node) => {
-                        const map = getMap();
-                        if (node) {
-                          map.set(thread.id, node);
-                        } else {
-                          map.delete(thread.id);
-                        }
-                      }}
-                      userEmail={userEmail}
-                      provider={provider}
-                      folderType={folderType}
-                      thread={thread}
-                      opened={openThreadId === thread.id}
-                      closePanel={closePanel}
-                      selected={selectedRows[thread.id]}
-                      onSelected={onSetSelectedRow}
-                      splitView={!!openThreadId}
-                      onClick={onOpen}
-                      onPlanAiAction={onPlanAiAction}
-                      onArchive={onArchive}
-                      refetch={refetch}
-                    />
-                  );
-                })}
+                      markReadThreads({
+                        threadIds: [thread.id],
+                        onSuccess: () => refetch(),
+                        emailAccountId,
+                      });
+                    };
+
+                    return (
+                      <EmailListItem
+                        key={virtualRow.key}
+                        ref={virtualizer.measureElement}
+                        dataIndex={virtualRow.index}
+                        style={{
+                          position: "absolute",
+                          top: 0,
+                          left: 0,
+                          width: "100%",
+                          transform: `translateY(${virtualRow.start}px)`,
+                        }}
+                        userEmail={userEmail}
+                        provider={provider}
+                        folderType={folderType}
+                        thread={thread}
+                        opened={openThreadId === thread.id}
+                        closePanel={closePanel}
+                        selected={selectedRows[thread.id]}
+                        onSelected={onSetSelectedRow}
+                        splitView={!!openThreadId}
+                        onClick={onOpen}
+                        onPlanAiAction={onPlanAiAction}
+                        onArchive={onArchive}
+                        refetch={refetch}
+                      />
+                    );
+                  })}
+                </ul>
                 {showLoadMore && (
                   <Button
                     variant="outline"
@@ -513,7 +514,7 @@ export function EmailList({
                     }
                   </Button>
                 )}
-              </ul>
+              </div>
             }
             right={
               !!(openThreadId && openedRow) && (

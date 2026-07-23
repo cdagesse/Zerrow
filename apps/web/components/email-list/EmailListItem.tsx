@@ -37,6 +37,9 @@ export const EmailListItem = forwardRef(
       onPlanAiAction: (thread: Thread) => void;
       onArchive: (thread: Thread) => void;
       refetch: () => void;
+      // virtualization: index for dynamic row measurement + positioning styles
+      dataIndex?: number;
+      style?: React.CSSProperties;
     },
     ref: ForwardedRef<HTMLLIElement>,
   ) => {
@@ -71,14 +74,19 @@ export const EmailListItem = forwardRef(
       <ErrorBoundary extra={{ props, cta, decodedSnippet }}>
         <li
           ref={ref}
-          className={clsx("group relative cursor-pointer border-l-4 py-3", {
-            "hover:bg-slate-50 dark:hover:bg-slate-950":
-              !props.selected && !props.opened,
-            "bg-primary/10": props.selected,
-            "bg-primary/20": props.opened,
-            "bg-slate-100 dark:bg-background":
-              !isUnread && !props.selected && !props.opened,
-          })}
+          data-index={props.dataIndex}
+          style={props.style}
+          className={clsx(
+            "group relative cursor-pointer border-b border-l-4 border-b-border py-3",
+            {
+              "hover:bg-slate-50 dark:hover:bg-slate-950":
+                !props.selected && !props.opened,
+              "bg-primary/10": props.selected,
+              "bg-primary/20": props.opened,
+              "bg-slate-100 dark:bg-background":
+                !isUnread && !props.selected && !props.opened,
+            },
+          )}
           onClick={props.onClick}
           onKeyDown={(e) => {
             if (e.key === "Enter" || e.key === " ") {
