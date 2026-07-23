@@ -50,7 +50,6 @@ type NavItem = {
   href: string;
   icon: LucideIcon | (() => React.ReactNode);
   target?: "_blank";
-  count?: number;
   active?: boolean;
   beta?: boolean;
   new?: boolean;

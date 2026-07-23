@@ -23,7 +23,7 @@ import { toastError, toastSuccess } from "@/components/Toast";
 import { useLabels } from "@/hooks/useLabels";
 import { useAccount } from "@/providers/EmailAccountProvider";
 import {
-  updateLabelsAction,
+  updateLabelAction,
   updateLabelVisibilityAction,
 } from "@/utils/actions/mail";
 import { getActionErrorMessage } from "@/utils/error";
@@ -74,6 +74,7 @@ function FolderSettingsContent({ labelId }: { labelId: string }) {
   const {
     data: dbLabels,
     isLoading: isLoadingDbLabels,
+    error: dbLabelsError,
     mutate: mutateDbLabels,
   } = useSWR<UserLabelsResponse>("/api/user/labels");
 
@@ -83,7 +84,10 @@ function FolderSettingsContent({ labelId }: { labelId: string }) {
   );
 
   return (
-    <LoadingContent loading={isLoading || isLoadingDbLabels} error={error}>
+    <LoadingContent
+      loading={isLoading || isLoadingDbLabels}
+      error={error || dbLabelsError}
+    >
       {label ? (
         <>
           <SheetHeader>
@@ -181,7 +185,7 @@ function AiLabelSetting({
   const [description, setDescription] = useState(initialDescription);
 
   const { execute, isExecuting } = useAction(
-    updateLabelsAction.bind(null, emailAccountId),
+    updateLabelAction.bind(null, emailAccountId),
     {
       onSuccess: () => {
         toastSuccess({ description: "Folder AI settings saved" });
@@ -225,14 +229,10 @@ function AiLabelSetting({
         loading={isExecuting}
         onClick={() =>
           execute({
-            labels: [
-              {
-                name: labelName,
-                description: description || undefined,
-                enabled,
-                gmailLabelId: labelId,
-              },
-            ],
+            name: labelName,
+            description: description || undefined,
+            enabled,
+            gmailLabelId: labelId,
           })
         }
       >

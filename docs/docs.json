@@ -99,7 +99,8 @@
               "hosting/vercel",
               "hosting/kubernetes",
               "hosting/troubleshooting",
-              "hosting/image-proxy"
+              "hosting/image-proxy",
+              "hosting/upstream-sync"
             ]
           },
           {

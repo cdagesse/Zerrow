@@ -32,6 +32,11 @@ import {
 import { useAccount } from "@/providers/EmailAccountProvider";
 import { prefixPath } from "@/utils/path";
 import { useIsMobile } from "@/hooks/use-mobile";
+import {
+  unarchiveThreadAction,
+  untrashThreadAction,
+} from "@/utils/actions/mail";
+import { isGoogleProvider } from "@/utils/email/provider-types";
 
 export function List({
   emails,
@@ -212,31 +217,61 @@ export function EmailList({
     [emailAccountId],
   );
 
+  const undoSupported = isGoogleProvider(provider);
+
+  const undoArchive = useCallback(
+    async (threadIds: string[]) => {
+      const results = await Promise.all(
+        threadIds.map((threadId) =>
+          unarchiveThreadAction(emailAccountId, { threadId }),
+        ),
+      );
+      if (results.some((result) => result?.serverError)) {
+        toast.error("There was an error undoing the archive :(");
+      }
+      refetch();
+    },
+    [emailAccountId, refetch],
+  );
+
+  const undoTrash = useCallback(
+    async (threadIds: string[]) => {
+      const results = await Promise.all(
+        threadIds.map((threadId) =>
+          untrashThreadAction(emailAccountId, { threadId }),
+        ),
+      );
+      if (results.some((result) => result?.serverError)) {
+        toast.error("There was an error undoing the delete :(");
+      }
+      refetch();
+    },
+    [emailAccountId, refetch],
+  );
+
   const onArchive = useCallback(
     (thread: Thread) => {
       const threadIds = [thread.id];
-      toast.promise(
-        async () => {
-          await new Promise<void>((resolve, reject) => {
-            archiveEmails({
-              threadIds,
-              onSuccess: () => {
-                refetch({ removedThreadIds: [thread.id] });
-                resolve();
-              },
-              onError: reject,
-              emailAccountId,
-            });
+      const toastId = toast.loading("Archiving...");
+      archiveEmails({
+        threadIds,
+        onSuccess: () => {
+          refetch({ removedThreadIds: threadIds });
+          toast.success("Archived!", {
+            id: toastId,
+            action: undoSupported
+              ? { label: "Undo", onClick: () => undoArchive(threadIds) }
+              : undefined,
           });
         },
-        {
-          loading: "Archiving...",
-          success: "Archived!",
-          error: "There was an error archiving the email :(",
-        },
-      );
+        onError: () =>
+          toast.error("There was an error archiving the email :(", {
+            id: toastId,
+          }),
+        emailAccountId,
+      });
     },
-    [refetch, emailAccountId],
+    [refetch, emailAccountId, undoSupported, undoArchive],
   );
 
   const listRef = useRef<HTMLUListElement>(null);
@@ -288,58 +323,52 @@ export function EmailList({
   }
 
   const onArchiveBulk = useCallback(async () => {
-    toast.promise(
-      async () => {
-        const threadIds = Object.entries(selectedRows)
-          .filter(([, selected]) => selected)
-          .map(([id]) => id);
-
-        await new Promise<void>((resolve, reject) => {
-          archiveEmails({
-            threadIds,
-            onSuccess: () => {
-              refetch({ removedThreadIds: threadIds });
-              resolve();
-            },
-            onError: reject,
-            emailAccountId,
-          });
+    const threadIds = Object.entries(selectedRows)
+      .filter(([, selected]) => selected)
+      .map(([id]) => id);
+    const toastId = toast.loading("Archiving emails...");
+    archiveEmails({
+      threadIds,
+      onSuccess: () => {
+        refetch({ removedThreadIds: threadIds });
+        toast.success("Emails archived", {
+          id: toastId,
+          action: undoSupported
+            ? { label: "Undo", onClick: () => undoArchive(threadIds) }
+            : undefined,
         });
       },
-      {
-        loading: "Archiving emails...",
-        success: "Emails archived",
-        error: "There was an error archiving the emails :(",
-      },
-    );
-  }, [selectedRows, refetch, emailAccountId]);
+      onError: () =>
+        toast.error("There was an error archiving the emails :(", {
+          id: toastId,
+        }),
+      emailAccountId,
+    });
+  }, [selectedRows, refetch, emailAccountId, undoSupported, undoArchive]);
 
   const onTrashBulk = useCallback(async () => {
-    toast.promise(
-      async () => {
-        const threadIds = Object.entries(selectedRows)
-          .filter(([, selected]) => selected)
-          .map(([id]) => id);
-
-        await new Promise<void>((resolve, reject) => {
-          deleteEmails({
-            threadIds,
-            onSuccess: () => {
-              refetch({ removedThreadIds: threadIds });
-              resolve();
-            },
-            onError: reject,
-            emailAccountId,
-          });
+    const threadIds = Object.entries(selectedRows)
+      .filter(([, selected]) => selected)
+      .map(([id]) => id);
+    const toastId = toast.loading("Deleting emails...");
+    deleteEmails({
+      threadIds,
+      onSuccess: () => {
+        refetch({ removedThreadIds: threadIds });
+        toast.success("Emails deleted!", {
+          id: toastId,
+          action: undoSupported
+            ? { label: "Undo", onClick: () => undoTrash(threadIds) }
+            : undefined,
         });
       },
-      {
-        loading: "Deleting emails...",
-        success: "Emails deleted!",
-        error: "There was an error deleting the emails :(",
-      },
-    );
-  }, [selectedRows, refetch, emailAccountId]);
+      onError: () =>
+        toast.error("There was an error deleting the emails :(", {
+          id: toastId,
+        }),
+      emailAccountId,
+    });
+  }, [selectedRows, refetch, emailAccountId, undoSupported, undoTrash]);
 
   const onPlanAiBulk = useCallback(async () => {
     toast.promise(

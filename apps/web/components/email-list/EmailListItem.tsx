@@ -17,6 +17,7 @@ import { decodeSnippet } from "@/utils/gmail/decode";
 import { useIsInAiQueue } from "@/store/ai-queue";
 import { Button } from "@/components/ui/button";
 import { findCtaLink } from "@/utils/parse/parseHtml.client";
+import { getDisplayedMessage } from "@/utils/email/displayed-message";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { internalDateToDate } from "@/utils/date";
 
@@ -148,7 +149,7 @@ export const EmailListItem = forwardRef(
               <div className="flex shrink-0 items-center justify-between">
                 <div className="relative flex items-center">
                   <div
-                    className="absolute right-0 z-20 hidden group-hover:block"
+                    className="absolute right-0 z-20 hidden md:group-hover:block"
                     // prevent email panel being opened when clicking on action buttons
                     onClick={preventPropagation}
                     onKeyDown={preventPropagation}
@@ -198,6 +199,25 @@ export const EmailListItem = forwardRef(
                   </Link>
                 </Button>
               )}
+              {/* Touch devices have no hover: show the row actions inline */}
+              {!splitView && (
+                <div
+                  className="mt-2 md:hidden"
+                  onClick={preventPropagation}
+                  onKeyDown={preventPropagation}
+                >
+                  <ActionButtons
+                    threadId={thread.id!}
+                    isPlanning={isPlanning}
+                    onPlanAiAction={() => props.onPlanAiAction(thread)}
+                    onArchive={() => {
+                      props.onArchive(thread);
+                      props.closePanel();
+                    }}
+                    refetch={props.refetch}
+                  />
+                </div>
+              )}
             </div>
           </div>
         </li>
@@ -207,17 +227,3 @@ export const EmailListItem = forwardRef(
 );
 
 EmailListItem.displayName = "EmailListItem";
-
-// In the Sent folder Gmail returns threads containing any sent message, so
-// the newest message is often the other person's reply. Show the user's own
-// last sent message there instead; participant() then shows the recipient.
-function getDisplayedMessage(thread: Thread, folderType?: string) {
-  const messages = thread.messages || [];
-  if (folderType === "sent") {
-    const lastSent = [...messages]
-      .reverse()
-      .find((message) => message.labelIds?.includes("SENT"));
-    if (lastSent) return lastSent;
-  }
-  return messages[messages.length - 1];
-}

@@ -292,6 +292,10 @@ export interface EmailProvider {
     ownerEmail: string,
     actionSource: "user" | "automation",
   ): Promise<void>;
+  /** Move an archived thread back to the inbox. Optional: powers undo. */
+  unarchiveThread?(threadId: string): Promise<void>;
+  /** Restore a trashed thread. Optional: powers undo. */
+  untrashThread?(threadId: string): Promise<void>;
   unwatchEmails(subscriptionId?: string): Promise<void>;
   updateDraft(
     draftId: string,

@@ -190,6 +190,69 @@ export const createLabelAction = actionClient
     },
   );
 
+export const unarchiveThreadAction = actionClient
+  .metadata({ name: "unarchiveThread" })
+  .inputSchema(z.object({ threadId: z.string() }))
+  .action(
+    async ({
+      ctx: { emailAccountId, provider, logger },
+      parsedInput: { threadId },
+    }) => {
+      const emailProvider = await createEmailProvider({
+        emailAccountId,
+        provider,
+        logger,
+      });
+      if (!emailProvider.unarchiveThread)
+        throw new SafeError("Undo is not supported for this email provider");
+      await emailProvider.unarchiveThread(threadId);
+    },
+  );
+
+export const untrashThreadAction = actionClient
+  .metadata({ name: "untrashThread" })
+  .inputSchema(z.object({ threadId: z.string() }))
+  .action(
+    async ({
+      ctx: { emailAccountId, provider, logger },
+      parsedInput: { threadId },
+    }) => {
+      const emailProvider = await createEmailProvider({
+        emailAccountId,
+        provider,
+        logger,
+      });
+      if (!emailProvider.untrashThread)
+        throw new SafeError("Undo is not supported for this email provider");
+      await emailProvider.untrashThread(threadId);
+    },
+  );
+
+export const updateLabelAction = actionClient
+  .metadata({ name: "updateLabel" })
+  .inputSchema(
+    z.object({
+      name: z.string(),
+      description: z.string().optional(),
+      enabled: z.boolean(),
+      gmailLabelId: z.string(),
+    }),
+  )
+  .action(
+    async ({
+      ctx: { emailAccountId },
+      parsedInput: { name, description, enabled, gmailLabelId },
+    }) => {
+      // Unlike updateLabelsAction, disabling keeps the row (and its
+      // description) so re-enabling doesn't start from scratch.
+      await prisma.label.upsert({
+        where: { name_emailAccountId: { name, emailAccountId } },
+        create: { gmailLabelId, name, description, enabled, emailAccountId },
+        update: { name, description, enabled, gmailLabelId },
+      });
+    },
+  );
+
 export const updateLabelVisibilityAction = actionClient
   .metadata({ name: "updateLabelVisibility" })
   .inputSchema(z.object({ labelId: z.string(), visible: z.boolean() }))
