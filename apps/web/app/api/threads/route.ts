@@ -69,11 +69,13 @@ async function getThreads({
   emailAccountId: string;
   emailProvider: EmailProvider;
 }) {
-  // Get threads using the provider
+  // List rows only need headers/snippet/labels; bodies are fetched on open
+  // via /api/threads/[id]. Metadata format cuts the Gmail payload ~10-50x.
   const { threads, nextPageToken } = await emailProvider.getThreadsWithQuery({
     query,
     maxResults: query.limit || 50,
     pageToken: query.nextPageToken || undefined,
+    format: "metadata",
   });
 
   const threadIds = threads.map((t) => t.id);

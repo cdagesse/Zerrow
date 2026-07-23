@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { XIcon } from "lucide-react";
 import { ActionButtons } from "@/components/ActionButtons";
 import { Tooltip } from "@/components/Tooltip";
@@ -8,6 +9,8 @@ import { useIsInAiQueue } from "@/store/ai-queue";
 import { EmailThread } from "@/components/email-list/EmailThread";
 import { useAccount } from "@/providers/EmailAccountProvider";
 import { MutedText } from "@/components/Typography";
+import { LoadingContent } from "@/components/LoadingContent";
+import { useThread } from "@/hooks/useThread";
 
 export function EmailPanel({
   row,
@@ -26,6 +29,20 @@ export function EmailPanel({
 }) {
   const { provider } = useAccount();
   const isPlanning = useIsInAiQueue(row.id);
+
+  // The list only carries message metadata; load the full thread (bodies,
+  // attachments, drafts) when the panel opens.
+  const {
+    data,
+    isLoading,
+    error,
+    mutate: mutateThread,
+  } = useThread({ id: row.id }, { includeDrafts: true });
+
+  const refetchThread = useCallback(() => {
+    mutateThread();
+    refetch();
+  }, [mutateThread, refetch]);
 
   const lastMessage = row.messages?.[row.messages.length - 1];
 
@@ -67,12 +84,16 @@ export function EmailPanel({
       </div>
       <div className="flex min-w-0 flex-1 flex-col overflow-y-auto">
         {plan?.rule && <PlanExplanation thread={row} provider={provider} />}
-        <EmailThread
-          key={row.id}
-          messages={row.messages}
-          refetch={refetch}
-          showReplyButton
-        />
+        <LoadingContent loading={isLoading} error={error}>
+          {data && (
+            <EmailThread
+              key={row.id}
+              messages={data.thread.messages}
+              refetch={refetchThread}
+              showReplyButton
+            />
+          )}
+        </LoadingContent>
       </div>
     </div>
   );

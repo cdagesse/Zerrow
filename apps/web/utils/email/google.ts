@@ -1413,6 +1413,7 @@ export class GmailProvider implements EmailProvider {
     query?: ThreadsQuery;
     maxResults?: number;
     pageToken?: string;
+    format?: "full" | "metadata";
   }): Promise<{
     threads: EmailThread[];
     nextPageToken?: string;
@@ -1517,6 +1518,7 @@ export class GmailProvider implements EmailProvider {
         threadIds,
         getAccessTokenFromClient(this.client),
         this.logger,
+        { format: options.format },
       );
 
       const emailThreads: EmailThread[] = threads
@@ -1537,8 +1539,29 @@ export class GmailProvider implements EmailProvider {
         })
         .filter((thread): thread is EmailThread => thread !== null);
 
+      // threads.list matches a thread when ANY message carries INBOX — and
+      // trashed messages keep their INBOX label while Gmail's UI hides them.
+      // Mirror the UI: the inbox view only shows threads with a live inbox
+      // message. Other views are driven by explicit labels/queries where this
+      // filter would be wrong.
+      const isInboxView =
+        !q &&
+        !fromEmail &&
+        !labelId &&
+        !labelIds?.length &&
+        (type == null ||
+          type === "undefined" ||
+          type === "null" ||
+          type === "inbox");
+
+      const visibleThreads = isInboxView
+        ? emailThreads.filter((thread) =>
+            thread.messages.some(isInboxVisibleMessage),
+          )
+        : emailThreads;
+
       return {
-        threads: emailThreads,
+        threads: visibleThreads,
         nextPageToken: nextPageToken || undefined,
       };
     });
@@ -1662,4 +1685,16 @@ export class GmailProvider implements EmailProvider {
 
     return this.sendAsEmailAddressesPromise;
   }
+}
+
+// Gmail's UI hides trashed/spam messages but they keep their INBOX label
+function isInboxVisibleMessage(message: ParsedMessage): boolean {
+  const labelIds = message.labelIds;
+  if (!labelIds) return false;
+  return (
+    labelIds.includes(GmailLabel.INBOX) &&
+    !labelIds.includes(GmailLabel.TRASH) &&
+    !labelIds.includes(GmailLabel.SPAM) &&
+    !labelIds.includes(GmailLabel.DRAFT)
+  );
 }

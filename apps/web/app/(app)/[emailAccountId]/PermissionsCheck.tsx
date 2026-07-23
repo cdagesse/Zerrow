@@ -21,14 +21,26 @@ export function PermissionsCheck() {
     if (permissionsChecked[emailAccountId]) return;
     permissionsChecked[emailAccountId] = true;
 
-    checkPermissionsAction(emailAccountId).then((result) => {
-      if (
-        result?.data?.hasAllPermissions === false ||
-        result?.data?.hasRefreshToken === false
-      ) {
-        router.replace(prefixPath(emailAccountId, "/permissions/consent"));
-      }
-    });
+    // Delay past first paint so this server action doesn't contend with the
+    // thread list request on cold serverless starts
+    let checked = false;
+    const timeout = setTimeout(() => {
+      checked = true;
+      checkPermissionsAction(emailAccountId).then((result) => {
+        if (
+          result?.data?.hasAllPermissions === false ||
+          result?.data?.hasRefreshToken === false
+        ) {
+          router.replace(prefixPath(emailAccountId, "/permissions/consent"));
+        }
+      });
+    }, 3000);
+
+    return () => {
+      clearTimeout(timeout);
+      // let a remount re-attempt if we never actually checked
+      if (!checked) permissionsChecked[emailAccountId] = false;
+    };
   }, [router, emailAccountId, isAccountOwner]);
 
   return null;

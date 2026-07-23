@@ -8,7 +8,7 @@ import { Inter } from "next/font/google";
 import { SideNavWithTopNav } from "@/components/SideNavWithTopNav";
 import { auth } from "@/utils/auth";
 import { PostHogIdentify } from "@/providers/PostHogProvider";
-import { CommandK } from "@/components/CommandK";
+import { DeferredAppExtras } from "@/components/DeferredAppExtras";
 import { AppProviders } from "@/providers/AppProviders";
 import { AssessUser } from "@/app/(app)/[emailAccountId]/assess";
 import { SentryIdentify } from "@/app/(app)/sentry-identify";
@@ -17,8 +17,6 @@ import { ErrorMessages } from "@/app/(app)/ErrorMessages";
 import { ProviderRateLimitBanner } from "@/app/(app)/ProviderRateLimitBanner";
 import { QueueInitializer } from "@/store/QueueInitializer";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
-import { EmailViewer } from "@/components/EmailViewer";
-import { AnnouncementDialog } from "@/components/feature-announcements/AnnouncementDialog";
 import { captureException } from "@/utils/error";
 import prisma from "@/utils/prisma";
 import { createScopedLogger } from "@/utils/logger";
@@ -87,12 +85,10 @@ export default async function AppLayout({
             <ProviderRateLimitBanner />
             {children}
           </SideNavWithTopNav>
-          <EmailViewer />
-          <AnnouncementDialog />
           <ErrorBoundary extra={{ component: "AppLayout" }}>
             <PostHogIdentify />
 
-            <CommandK />
+            <DeferredAppExtras />
             <QueueInitializer />
             <AssessUser />
             <SentryIdentify email={session.user.email} />
