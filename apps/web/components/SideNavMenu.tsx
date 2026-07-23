@@ -25,8 +25,6 @@ type NavItem = {
   href: string;
   icon: LucideIcon | ((props: ComponentProps<"svg">) => React.ReactNode);
   target?: "_blank";
-  count?: number;
-  hideInMail?: boolean;
   active?: boolean;
   beta?: boolean;
   new?: boolean;

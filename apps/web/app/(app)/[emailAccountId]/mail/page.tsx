@@ -41,11 +41,15 @@ export default function Mail(props: {
   };
 
   // No keepPreviousData: switching folders should show a loader rather than
-  // the previous folder's emails; revisited folders load instantly from cache
+  // the previous folder's emails; revisited folders load instantly from cache.
+  // Focus revalidation + a 30s poll of the first page keep new mail appearing
+  // without a manual reload.
   const { data, size, setSize, isLoading, error, mutate } =
     useSWRInfinite<ThreadsResponse>(getKey, {
       dedupingInterval: 1000,
-      revalidateOnFocus: false,
+      revalidateOnFocus: true,
+      revalidateFirstPage: true,
+      refreshInterval: 30_000,
     });
 
   const allThreads = data ? data.flatMap((page) => page.threads) : [];
@@ -57,6 +61,13 @@ export default function Mail(props: {
   // TODO is this the best way to do this?
   const refetch = useCallback(
     (options?: { removedThreadIds?: string[] }) => {
+      // Without removedThreadIds there is nothing to optimistically update;
+      // revalidate so changes like undo actually show up.
+      if (!options?.removedThreadIds) {
+        mutate();
+        return;
+      }
+
       mutate(
         (currentData) => {
           if (!currentData) return currentData;

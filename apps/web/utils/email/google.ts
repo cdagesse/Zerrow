@@ -1012,6 +1012,21 @@ export class GmailProvider implements EmailProvider {
     });
   }
 
+  async unarchiveThread(threadId: string): Promise<void> {
+    await this.client.users.threads.modify({
+      userId: "me",
+      id: threadId,
+      requestBody: { addLabelIds: [GmailLabel.INBOX] },
+    });
+  }
+
+  async untrashThread(threadId: string): Promise<void> {
+    await this.client.users.threads.untrash({
+      userId: "me",
+      id: threadId,
+    });
+  }
+
   async updateLabelVisibility(
     labelId: string,
     visible: boolean,
