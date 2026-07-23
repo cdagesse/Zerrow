@@ -25,6 +25,7 @@ type NavItem = {
   href: string;
   icon: LucideIcon | ((props: ComponentProps<"svg">) => React.ReactNode);
   target?: "_blank";
+  count?: number;
   active?: boolean;
   beta?: boolean;
   new?: boolean;
@@ -75,6 +76,14 @@ export function SideNavMenu({
             >
               <item.icon />
               <span>{item.name}</span>
+              {typeof item.count === "number" && item.count > 0 && (
+                <Badge
+                  variant="secondary"
+                  className="ml-auto px-1.5 text-[10px] tabular-nums"
+                >
+                  {item.count > 99 ? "99+" : item.count}
+                </Badge>
+              )}
               {item.new && (
                 <Badge variant="green" className="ml-auto text-[10px]">
                   New!

@@ -1012,6 +1012,25 @@ export class GmailProvider implements EmailProvider {
     });
   }
 
+  async getUnreadCounts(labelIds: string[]): Promise<Record<string, number>> {
+    return this.withRateLimitTracking("get-unread-counts", async () => {
+      const entries = await Promise.all(
+        labelIds.map(async (id) => {
+          try {
+            const response = await this.client.users.labels.get({
+              userId: "me",
+              id,
+            });
+            return [id, response.data.threadsUnread ?? 0] as const;
+          } catch {
+            return [id, 0] as const;
+          }
+        }),
+      );
+      return Object.fromEntries(entries);
+    });
+  }
+
   async unarchiveThread(threadId: string): Promise<void> {
     await this.client.users.threads.modify({
       userId: "me",
@@ -1400,6 +1419,7 @@ export class GmailProvider implements EmailProvider {
   }> {
     return this.withRateLimitTracking("get-threads-with-query", async () => {
       const {
+        q,
         fromEmail,
         after,
         before,
@@ -1412,6 +1432,10 @@ export class GmailProvider implements EmailProvider {
 
       function getQuery() {
         const queryParts: string[] = [];
+
+        if (q) {
+          queryParts.push(q);
+        }
 
         if (fromEmail) {
           queryParts.push(`from:${fromEmail}`);
