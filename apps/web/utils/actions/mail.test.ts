@@ -111,14 +111,49 @@ describe("updateLabelAction", () => {
         description: "Invoices",
         enabled: false,
         emailAccountId: "account-1",
+        icon: undefined,
       },
       update: {
         name: "Billing",
         description: "Invoices",
         enabled: false,
         gmailLabelId: "Label_1",
+        icon: undefined,
       },
     });
     expect(prisma.label.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("persists a chosen icon", async () => {
+    await updateLabelAction("account-1", {
+      name: "Billing",
+      enabled: true,
+      gmailLabelId: "Label_1",
+      icon: "receipt",
+    });
+
+    expect(prisma.label.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        create: expect.objectContaining({ icon: "receipt" }),
+        update: expect.objectContaining({ icon: "receipt" }),
+      }),
+    );
+  });
+
+  it("leaves the stored icon untouched when the save omits it", async () => {
+    await updateLabelAction("account-1", {
+      name: "Billing",
+      description: "Invoices",
+      enabled: true,
+      gmailLabelId: "Label_1",
+    });
+
+    // undefined means "don't change" in prisma updates — the AI settings
+    // save must not clear an icon picked earlier
+    expect(prisma.label.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ icon: undefined }),
+      }),
+    );
   });
 });

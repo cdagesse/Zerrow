@@ -3,7 +3,7 @@
 import { useState } from "react";
 import useSWR from "swr";
 import { useAction } from "next-safe-action/hooks";
-import { SettingsIcon, TagIcon } from "lucide-react";
+import { SettingsIcon } from "lucide-react";
 import type { UserLabelsResponse } from "@/app/api/user/labels/route";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,17 +28,23 @@ import {
 } from "@/utils/actions/mail";
 import { getActionErrorMessage } from "@/utils/error";
 import { isGoogleProvider } from "@/utils/email/provider-types";
+import { LABEL_ICONS, getLabelIcon } from "@/utils/label-icons";
+import { cn } from "@/utils";
 
 // Header row for label folder views: folder name plus the settings gear.
 // Rendered above the list so it's available even when the folder is empty.
 export function FolderHeader({ labelId }: { labelId: string }) {
   const { userLabels } = useLabels();
+  const { data: dbLabels } = useSWR<UserLabelsResponse>("/api/user/labels");
   const label = userLabels.find((userLabel) => userLabel.id === labelId);
+  const Icon = getLabelIcon(
+    dbLabels?.find((candidate) => candidate.gmailLabelId === labelId)?.icon,
+  );
 
   return (
     <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-1.5">
       <div className="flex min-w-0 items-center gap-2">
-        <TagIcon className="size-4 shrink-0 text-muted-foreground" />
+        <Icon className="size-4 shrink-0 text-muted-foreground" />
         <span className="truncate text-sm font-medium">
           {label?.name ?? "Folder"}
         </span>
@@ -96,6 +102,15 @@ function FolderSettingsContent({ labelId }: { labelId: string }) {
           </SheetHeader>
 
           <div className="mt-6 space-y-8">
+            <IconSetting
+              key={`icon-${labelId}`}
+              emailAccountId={emailAccountId}
+              labelId={labelId}
+              labelName={label.name}
+              dbLabel={dbLabel}
+              mutateDbLabels={mutateDbLabels}
+            />
+
             {isGoogleProvider(provider) && (
               <VisibilitySetting
                 labelId={labelId}
@@ -121,6 +136,75 @@ function FolderSettingsContent({ labelId }: { labelId: string }) {
         </SheetHeader>
       )}
     </LoadingContent>
+  );
+}
+
+function IconSetting({
+  emailAccountId,
+  labelId,
+  labelName,
+  dbLabel,
+  mutateDbLabels,
+}: {
+  emailAccountId: string;
+  labelId: string;
+  labelName: string;
+  dbLabel: UserLabelsResponse[number] | undefined;
+  mutateDbLabels: () => void;
+}) {
+  const [selected, setSelected] = useState(dbLabel?.icon ?? "tag");
+
+  const { execute, isExecuting } = useAction(
+    updateLabelAction.bind(null, emailAccountId),
+    {
+      onSuccess: () => {
+        toastSuccess({ description: "Folder icon updated" });
+        mutateDbLabels();
+      },
+      onError: (error) => {
+        setSelected(dbLabel?.icon ?? "tag");
+        toastError({ description: getActionErrorMessage(error.error) });
+      },
+    },
+  );
+
+  return (
+    <div>
+      <Label>Icon</Label>
+      <p className="mt-1 text-sm text-muted-foreground">
+        Shown next to this folder in the sidebar — handy when the sidebar is
+        collapsed.
+      </p>
+      <div className="mt-3 grid grid-cols-6 gap-1.5">
+        {Object.entries(LABEL_ICONS).map(([name, Icon]) => (
+          <button
+            key={name}
+            type="button"
+            aria-label={`Use ${name} icon`}
+            aria-pressed={selected === name}
+            disabled={isExecuting}
+            onClick={() => {
+              setSelected(name);
+              // Icon applies immediately; description/enabled reuse the
+              // saved values so an unsaved AI draft isn't committed here
+              execute({
+                name: labelName,
+                description: dbLabel?.description ?? undefined,
+                enabled: dbLabel?.enabled ?? false,
+                gmailLabelId: labelId,
+                icon: name,
+              });
+            }}
+            className={cn(
+              "flex items-center justify-center rounded-md border border-border p-2 text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+              selected === name && "border-primary bg-primary/10 text-primary",
+            )}
+          >
+            <Icon className="size-4" />
+          </button>
+        ))}
+      </div>
+    </div>
   );
 }
 

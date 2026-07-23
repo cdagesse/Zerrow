@@ -5,6 +5,8 @@ import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import useSWR from "swr";
 import type { LabelCountsResponse } from "@/app/api/labels/counts/route";
+import type { UserLabelsResponse } from "@/app/api/user/labels/route";
+import { getLabelIcon } from "@/utils/label-icons";
 import { getEmailTerminology } from "@/utils/terminology";
 import {
   ArchiveIcon,
@@ -17,7 +19,6 @@ import {
   SendIcon,
   SettingsIcon,
   ShieldIcon,
-  TagIcon,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { useComposeModal } from "@/providers/ComposeModalProvider";
@@ -143,6 +144,15 @@ function MailNav({ path }: { path: string }) {
   );
   const counts = countsData?.counts;
 
+  const { data: dbLabels } = useSWR<UserLabelsResponse>("/api/user/labels");
+  const iconByGmailLabelId = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const dbLabel of dbLabels ?? []) {
+      if (dbLabel.icon) map[dbLabel.gmailLabelId] = dbLabel.icon;
+    }
+    return map;
+  }, [dbLabels]);
+
   const isMailPage = path.includes("/mail");
   const currentType = searchParams.get("type");
   const currentLabelId = searchParams.get("labelId");
@@ -168,7 +178,7 @@ function MailNav({ path }: { path: string }) {
     name?: string | null;
   }) => ({
     name: label.name ?? "",
-    icon: TagIcon,
+    icon: getLabelIcon(label.id ? iconByGmailLabelId[label.id] : undefined),
     href: `${mailPath}?type=label&labelId=${encodeURIComponent(label.id ?? "")}`,
     count: label.id ? counts?.[label.id] : undefined,
     active:
