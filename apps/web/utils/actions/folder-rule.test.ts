@@ -1,9 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import prisma from "@/utils/__mocks__/prisma";
-import { ActionType, LogicalOperator } from "@/generated/prisma/enums";
 
-const { createRuleWithResolvedActionsMock } = vi.hoisted(() => ({
-  createRuleWithResolvedActionsMock: vi.fn(),
+const {
+  createEmailProviderMock,
+  getEmailAccountWithAiAndTokensMock,
+  aiGenerateFolderInstructionsMock,
+} = vi.hoisted(() => ({
+  createEmailProviderMock: vi.fn(),
+  getEmailAccountWithAiAndTokensMock: vi.fn(),
+  aiGenerateFolderInstructionsMock: vi.fn(),
 }));
 
 vi.mock("@/utils/prisma");
@@ -13,13 +18,16 @@ vi.mock("@/utils/auth", () => ({
   })),
 }));
 vi.mock("@/utils/email/provider", () => ({
-  createEmailProvider: vi.fn(),
+  createEmailProvider: createEmailProviderMock,
 }));
-vi.mock("@/utils/rule/rule", () => ({
-  createRuleWithResolvedActions: createRuleWithResolvedActionsMock,
+vi.mock("@/utils/user/get", () => ({
+  getEmailAccountWithAiAndTokens: getEmailAccountWithAiAndTokensMock,
+}));
+vi.mock("@/utils/ai/label/generate-folder-instructions", () => ({
+  aiGenerateFolderInstructions: aiGenerateFolderInstructionsMock,
 }));
 
-import { saveFolderRuleAction } from "@/utils/actions/folder-rule";
+import { generateFolderInstructionsAction } from "@/utils/actions/folder-rule";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -31,155 +39,85 @@ beforeEach(() => {
       provider: "google",
     },
   } as any);
+  getEmailAccountWithAiAndTokensMock.mockResolvedValue({
+    id: "account-1",
+    email: "user@example.com",
+    user: {},
+  });
 });
 
-describe("saveFolderRuleAction", () => {
-  it("creates a rule with a LABEL action when the folder has none", async () => {
-    prisma.rule.findFirst.mockResolvedValue(null);
-    prisma.rule.findUnique.mockResolvedValue(null);
-    createRuleWithResolvedActionsMock.mockResolvedValue({ id: "rule-1" });
-
-    const result = await saveFolderRuleAction("account-1", {
-      labelId: "Label_1",
-      labelName: "Billing",
-      enabled: true,
-      instructions: "Invoices and receipts",
-      from: "@stripe.com",
-      conditionalOperator: LogicalOperator.OR,
-    });
-
-    expect(result?.data).toEqual({ ruleId: "rule-1" });
-    expect(createRuleWithResolvedActionsMock).toHaveBeenCalledWith({
-      emailAccountId: "account-1",
-      data: {
-        name: "Label: Billing",
-        enabled: true,
-        instructions: "Invoices and receipts",
-        from: "@stripe.com",
-        conditionalOperator: LogicalOperator.OR,
-        runOnThreads: false,
-      },
-      actions: [
-        { type: ActionType.LABEL, label: "Billing", labelId: "Label_1" },
-      ],
-    });
-  });
-
-  it("suffixes the rule name when 'Label: <name>' is taken", async () => {
-    prisma.rule.findFirst.mockResolvedValue(null);
-    prisma.rule.findUnique
-      .mockResolvedValueOnce({ id: "clash" } as any)
-      .mockResolvedValueOnce(null);
-    createRuleWithResolvedActionsMock.mockResolvedValue({ id: "rule-2" });
-
-    await saveFolderRuleAction("account-1", {
-      labelId: "Label_1",
-      labelName: "Billing",
-      enabled: true,
-      instructions: "Invoices",
-      conditionalOperator: LogicalOperator.OR,
-    });
-
-    expect(createRuleWithResolvedActionsMock).toHaveBeenCalledWith(
-      expect.objectContaining({
-        data: expect.objectContaining({ name: "Label: Billing (2)" }),
-      }),
-    );
-  });
-
-  it("updates only the drawer-owned fields on an existing rule", async () => {
-    prisma.rule.findFirst.mockResolvedValue({
-      id: "rule-1",
-      organizationRuleId: null,
-      actions: [{ type: ActionType.LABEL }, { type: ActionType.ARCHIVE }],
-    } as any);
-
-    await saveFolderRuleAction("account-1", {
-      labelId: "Label_1",
-      labelName: "Billing",
-      enabled: false,
-      instructions: "  ",
-      from: "@stripe.com",
-      conditionalOperator: LogicalOperator.AND,
-    });
-
-    // Older rules reference the label by name only — the lookup must match
-    // either, so the drawer edits the same rule the Assistant page shows
-    expect(prisma.rule.findFirst).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          actions: {
-            some: {
-              type: ActionType.LABEL,
-              OR: [{ labelId: "Label_1" }, { label: "Billing" }],
+describe("generateFolderInstructionsAction", () => {
+  it("returns the AI draft built from the folder's recent emails", async () => {
+    createEmailProviderMock.mockResolvedValue({
+      getThreadsWithLabel: vi.fn().mockResolvedValue([
+        {
+          id: "thread-1",
+          messages: [
+            {
+              id: "message-1",
+              headers: { from: "billing@stripe.com", subject: "Receipt" },
             },
-          },
-        }),
-      }),
+          ],
+        },
+      ]),
+    });
+    aiGenerateFolderInstructionsMock.mockResolvedValue({
+      instructions: "Receipts and invoices",
+      senderPatterns: ["billing@stripe.com"],
+    });
+
+    const result = await generateFolderInstructionsAction("account-1", {
+      labelId: "Label_1",
+      labelName: "Billing",
+    });
+
+    expect(result?.data).toEqual({
+      instructions: "Receipts and invoices",
+      senderPatterns: ["billing@stripe.com"],
+    });
+  });
+
+  it("explains when the folder has no emails to learn from", async () => {
+    createEmailProviderMock.mockResolvedValue({
+      getThreadsWithLabel: vi.fn().mockResolvedValue([]),
+    });
+
+    const result = await generateFolderInstructionsAction("account-1", {
+      labelId: "Label_1",
+      labelName: "Billing",
+    });
+
+    expect(result?.serverError).toContain("no emails to learn from");
+    expect(aiGenerateFolderInstructionsMock).not.toHaveBeenCalled();
+  });
+
+  it("surfaces the underlying cause when the AI call fails, even for non-Error throwables", async () => {
+    createEmailProviderMock.mockResolvedValue({
+      getThreadsWithLabel: vi.fn().mockResolvedValue([
+        {
+          id: "thread-1",
+          messages: [
+            {
+              id: "message-1",
+              headers: { from: "billing@stripe.com", subject: "Receipt" },
+            },
+          ],
+        },
+      ]),
+    });
+    // DOMException-like: has name/message but is not an Error instance
+    aiGenerateFolderInstructionsMock.mockRejectedValue({
+      name: "AbortError",
+      message: "The operation was aborted",
+    });
+
+    const result = await generateFolderInstructionsAction("account-1", {
+      labelId: "Label_1",
+      labelName: "Billing",
+    });
+
+    expect(result?.serverError).toContain(
+      "AbortError: The operation was aborted",
     );
-
-    expect(createRuleWithResolvedActionsMock).not.toHaveBeenCalled();
-    expect(prisma.rule.update).toHaveBeenCalledWith({
-      where: { id: "rule-1", emailAccountId: "account-1" },
-      data: {
-        enabled: false,
-        instructions: null,
-        from: "@stripe.com",
-        conditionalOperator: LogicalOperator.AND,
-      },
-    });
-  });
-
-  it("rejects when both instructions and senders are empty", async () => {
-    const result = await saveFolderRuleAction("account-1", {
-      labelId: "Label_1",
-      labelName: "Billing",
-      enabled: true,
-      instructions: "",
-      from: "  ",
-      conditionalOperator: LogicalOperator.OR,
-    });
-
-    expect(result?.validationErrors).toBeTruthy();
-    expect(prisma.rule.update).not.toHaveBeenCalled();
-    expect(createRuleWithResolvedActionsMock).not.toHaveBeenCalled();
-  });
-
-  it("refuses to edit an organization-managed rule", async () => {
-    prisma.rule.findFirst.mockResolvedValue({
-      id: "rule-1",
-      organizationRuleId: "org-rule-1",
-      actions: [{ type: ActionType.LABEL }],
-    } as any);
-
-    const result = await saveFolderRuleAction("account-1", {
-      labelId: "Label_1",
-      labelName: "Billing",
-      enabled: true,
-      instructions: "Invoices",
-      conditionalOperator: LogicalOperator.OR,
-    });
-
-    expect(result?.serverError).toBeTruthy();
-    expect(prisma.rule.update).not.toHaveBeenCalled();
-  });
-
-  it("blocks adding a spoofable From to a rule with outbound actions", async () => {
-    prisma.rule.findFirst.mockResolvedValue({
-      id: "rule-1",
-      organizationRuleId: null,
-      actions: [{ type: ActionType.LABEL }, { type: ActionType.FORWARD }],
-    } as any);
-
-    const result = await saveFolderRuleAction("account-1", {
-      labelId: "Label_1",
-      labelName: "Billing",
-      enabled: true,
-      from: "Stripe Billing",
-      conditionalOperator: LogicalOperator.OR,
-    });
-
-    expect(result?.serverError).toBeTruthy();
-    expect(prisma.rule.update).not.toHaveBeenCalled();
   });
 });
