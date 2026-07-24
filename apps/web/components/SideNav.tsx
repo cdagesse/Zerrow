@@ -178,6 +178,8 @@ function MailNav({ path }: { path: string }) {
     name?: string | null;
   }) => ({
     name: label.name ?? "",
+    // Nested Gmail labels ("Work/Invoices") read better as their last segment
+    shortName: (label.name ?? "").split("/").pop() || (label.name ?? ""),
     icon: getLabelIcon(label.id ? iconByGmailLabelId[label.id] : undefined),
     href: `${mailPath}?type=label&labelId=${encodeURIComponent(label.id ?? "")}`,
     count: label.id ? counts?.[label.id] : undefined,

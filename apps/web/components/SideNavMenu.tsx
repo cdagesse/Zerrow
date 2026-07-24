@@ -22,6 +22,9 @@ import {
 
 type NavItem = {
   name: string;
+  // Display override (e.g. last segment of a nested label); name stays the
+  // full value for keys, tooltips, and analytics
+  shortName?: string;
   href: string;
   icon: LucideIcon | ((props: ComponentProps<"svg">) => React.ReactNode);
   target?: "_blank";
@@ -75,7 +78,7 @@ export function SideNavMenu({
               }}
             >
               <item.icon />
-              <span>{item.name}</span>
+              <span>{item.shortName ?? item.name}</span>
               {typeof item.count === "number" && item.count > 0 && (
                 <Badge
                   variant="secondary"
