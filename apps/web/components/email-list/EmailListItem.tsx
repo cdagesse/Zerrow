@@ -9,7 +9,7 @@ import {
 import Link from "next/link";
 import clsx from "clsx";
 import { motion, type PanInfo } from "framer-motion";
-import { ArchiveIcon, Trash2Icon } from "lucide-react";
+import { ArchiveIcon, SparklesIcon, Trash2Icon } from "lucide-react";
 import { ActionButtons } from "@/components/ActionButtons";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { PlanBadge } from "@/components/PlanBadge";
@@ -204,6 +204,14 @@ export const EmailListItem = forwardRef(
                   )}
                 </div>
               </div>
+
+              {/* The AI's read on this email, when a rule matched */}
+              {!!thread.plan?.reason && (
+                <div className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-primary">
+                  <SparklesIcon className="size-3 shrink-0" />
+                  <span className="min-w-0 truncate">{thread.plan.reason}</span>
+                </div>
+              )}
 
               {/* Stacked subject/snippet: always in split view, and on mobile where the inline layout doesn't fit */}
               <div

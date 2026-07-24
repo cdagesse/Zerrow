@@ -7,10 +7,15 @@ import { z } from "zod";
 import {
   createCompanyBody,
   enrichContactBody,
+  setCarddavAccessBody,
   setGoogleContactsSyncBody,
   updateCompanyBody,
   updateContactBody,
 } from "@/utils/actions/contact.validation";
+import {
+  generateCarddavPassword,
+  hashCarddavPassword,
+} from "@/utils/carddav/auth";
 import {
   pullGoogleContacts,
   pushContactToGoogle,
@@ -99,6 +104,29 @@ export const setGoogleContactsSyncAction = actionClient
       return { enabled };
     },
   );
+
+// Enables CardDAV access (iOS/macOS Contacts) by generating an app
+// password. The plaintext is returned exactly once; only its hash is stored.
+export const setCarddavAccessAction = actionClient
+  .metadata({ name: "setCarddavAccess" })
+  .inputSchema(setCarddavAccessBody)
+  .action(async ({ ctx: { emailAccountId }, parsedInput: { enabled } }) => {
+    if (!enabled) {
+      await prisma.emailAccount.update({
+        where: { id: emailAccountId },
+        data: { carddavPasswordHash: null },
+      });
+      return { enabled: false as const };
+    }
+
+    const password = generateCarddavPassword();
+    await prisma.emailAccount.update({
+      where: { id: emailAccountId },
+      data: { carddavPasswordHash: hashCarddavPassword(password) },
+    });
+
+    return { enabled: true as const, password };
+  });
 
 // Manual "Sync now" — pulls from Google immediately
 export const syncGoogleContactsAction = actionClient

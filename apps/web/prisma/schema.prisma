@@ -170,6 +170,8 @@ model EmailAccount {
   googleContactsSyncEnabled Boolean   @default(false)
   googleContactsSyncToken   String?
   googleContactsSyncedAt    DateTime?
+  // App password (hashed) for CardDAV clients like iOS Contacts
+  carddavPasswordHash       String?
 
   digestSendEmail     Boolean   @default(true)
   digestSchedule      Schedule?
@@ -949,6 +951,9 @@ model Contact {
   // Google People API linkage for two-way sync
   googleResourceName String?
   googleEtag         String?
+
+  // Resource id used by CardDAV clients (iOS assigns its own UIDs on create)
+  carddavUid String?
 
   emailAccountId String
   emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)

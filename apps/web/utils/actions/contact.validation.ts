@@ -29,6 +29,11 @@ export type SetGoogleContactsSyncBody = z.infer<
   typeof setGoogleContactsSyncBody
 >;
 
+export const setCarddavAccessBody = z.object({
+  enabled: z.boolean(),
+});
+export type SetCarddavAccessBody = z.infer<typeof setCarddavAccessBody>;
+
 export const createCompanyBody = z.object({
   name: z.string().min(1).max(200),
   domains: z.array(z.string().min(1).max(200)).max(50).optional(),

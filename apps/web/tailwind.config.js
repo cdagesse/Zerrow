@@ -48,6 +48,7 @@ module.exports = {
         sans: ["var(--font-geist)", ...fontFamily.sans],
         inter: ["var(--font-inter)", ...fontFamily.sans],
         title: ["var(--font-title)", ...fontFamily.sans],
+        display: ["var(--font-display)", "Georgia", ...fontFamily.serif],
       },
       colors: {
         // shadcn/ui

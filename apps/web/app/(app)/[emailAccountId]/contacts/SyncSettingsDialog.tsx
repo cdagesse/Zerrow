@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useAction } from "next-safe-action/hooks";
 import { formatDistanceToNow } from "date-fns";
 import {
+  setCarddavAccessAction,
   setGoogleContactsSyncAction,
   syncGoogleContactsAction,
 } from "@/utils/actions/contact";
@@ -23,6 +25,7 @@ export type SyncState = {
   provider: string | null;
   googleEnabled: boolean;
   googleSyncedAt: Date | string | null;
+  carddavEnabled: boolean;
 };
 
 export function SyncSettingsDialog({
@@ -36,7 +39,7 @@ export function SyncSettingsDialog({
   sync: SyncState;
   mutateContacts: () => void;
 }) {
-  const { emailAccountId } = useAccount();
+  const { emailAccountId, userEmail } = useAccount();
 
   const toggle = useAction(
     setGoogleContactsSyncAction.bind(null, emailAccountId),
@@ -71,6 +74,21 @@ export function SyncSettingsDialog({
       },
     },
   );
+
+  const [carddavPassword, setCarddavPassword] = useState<string | null>(null);
+
+  const carddav = useAction(setCarddavAccessAction.bind(null, emailAccountId), {
+    onSuccess: (result) => {
+      setCarddavPassword(result.data?.password ?? null);
+      if (!result.data?.enabled) {
+        toastSuccess({ description: "CardDAV access disabled" });
+      }
+      mutateContacts();
+    },
+    onError: (error) => {
+      toastError({ description: getActionErrorMessage(error.error) });
+    },
+  });
 
   const isGoogle = sync.provider === "google";
 
@@ -132,6 +150,59 @@ export function SyncSettingsDialog({
             Contact sync is currently available for Google accounts only.
           </p>
         )}
+
+        <div className="space-y-4 border-t border-border pt-4">
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <Label htmlFor="carddav-access">
+                iPhone &amp; iPad (CardDAV)
+              </Label>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Sync contacts to your phone by adding a CardDAV account in iOS
+                Settings.
+              </p>
+            </div>
+            <Switch
+              id="carddav-access"
+              checked={sync.carddavEnabled}
+              disabled={carddav.isExecuting}
+              onCheckedChange={(enabled) => carddav.execute({ enabled })}
+            />
+          </div>
+
+          {carddavPassword && (
+            <div className="space-y-1 rounded-md border border-border p-3 text-sm">
+              <p className="font-medium">
+                Add this account on your iPhone — the password is shown only
+                once:
+              </p>
+              <p className="text-muted-foreground">
+                iOS Settings → Apps → Contacts → Contacts Accounts → Add Account
+                → Other → Add CardDAV Account
+              </p>
+              <p>
+                Server:{" "}
+                <code className="select-all">
+                  {typeof window !== "undefined" ? window.location.origin : ""}
+                  /api/carddav
+                </code>
+              </p>
+              <p>
+                Username: <code className="select-all">{userEmail}</code>
+              </p>
+              <p>
+                Password: <code className="select-all">{carddavPassword}</code>
+              </p>
+            </div>
+          )}
+
+          {sync.carddavEnabled && !carddavPassword && (
+            <p className="text-xs text-muted-foreground">
+              CardDAV access is on. Lost the password? Toggle off and on to
+              generate a new one.
+            </p>
+          )}
+        </div>
       </DialogContent>
     </Dialog>
   );

@@ -28,13 +28,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
+import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ContactAvatar } from "./ContactsList";
 
 export function ContactDetailSheet({
@@ -51,6 +45,7 @@ export function ContactDetailSheet({
   return (
     <Sheet open={!!contact} onOpenChange={(open) => !open && onClose()}>
       <SheetContent side="right" className="overflow-y-auto sm:max-w-xl">
+        <SheetTitle className="sr-only">Contact details</SheetTitle>
         {contact && (
           <ContactDetails
             key={contact.email}
@@ -64,7 +59,8 @@ export function ContactDetailSheet({
   );
 }
 
-function ContactDetails({
+// Also rendered inline as the persistent right pane on wide screens
+export function ContactDetails({
   contact,
   companies,
   mutateContacts,
@@ -78,25 +74,23 @@ function ContactDetails({
 
   return (
     <div className="space-y-6">
-      <SheetHeader className="space-y-1">
-        <div className="flex items-center gap-3">
-          <ContactAvatar
-            contact={contact}
-            companies={companies}
-            className="size-10 shrink-0 rounded-full bg-muted object-cover p-0.5"
-          />
-          <div className="min-w-0">
-            <SheetTitle className="truncate">
-              {contact.name || contact.email}
-            </SheetTitle>
-            <SheetDescription className="truncate">
-              {[contact.title, company?.name, contact.email]
-                .filter(Boolean)
-                .join(" · ")}
-            </SheetDescription>
-          </div>
+      <div className="flex items-center gap-3">
+        <ContactAvatar
+          contact={contact}
+          companies={companies}
+          className="size-10 shrink-0 rounded-full bg-muted object-cover p-0.5"
+        />
+        <div className="min-w-0">
+          <h2 className="truncate font-display text-2xl tracking-tight">
+            {contact.name || contact.email}
+          </h2>
+          <p className="truncate text-sm text-muted-foreground">
+            {[contact.title, company?.name, contact.email]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
         </div>
-      </SheetHeader>
+      </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
         <span>{contact.receivedCount} received</span>

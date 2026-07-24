@@ -122,6 +122,7 @@ async function getContacts({
     select: {
       googleContactsSyncEnabled: true,
       googleContactsSyncedAt: true,
+      carddavPasswordHash: true,
       account: { select: { provider: true } },
     },
   });
@@ -134,6 +135,7 @@ async function getContacts({
       provider: syncState?.account.provider ?? null,
       googleEnabled: syncState?.googleContactsSyncEnabled ?? false,
       googleSyncedAt: syncState?.googleContactsSyncedAt ?? null,
+      carddavEnabled: !!syncState?.carddavPasswordHash,
     },
   };
 }

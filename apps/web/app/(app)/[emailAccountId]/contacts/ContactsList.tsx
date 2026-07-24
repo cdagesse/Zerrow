@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { formatDistanceToNow } from "date-fns";
@@ -10,6 +10,7 @@ import {
   contactAvatarUrl,
   type CompanySummary,
   type ContactListItem,
+  groupContacts,
   resolveContactCompany,
 } from "@/utils/contacts";
 import { SearchBar } from "@/components/SearchBar";
@@ -25,7 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { ContactDetailSheet } from "./ContactDetailSheet";
+import { ContactDetails, ContactDetailSheet } from "./ContactDetailSheet";
 import { CompaniesView } from "./CompaniesView";
 import { AddContactDialog } from "./AddContactDialog";
 import { SyncSettingsDialog } from "./SyncSettingsDialog";
@@ -41,11 +42,14 @@ export function ContactsList() {
   const [adding, setAdding] = useState(false);
   const [showSync, setShowSync] = useState(false);
 
-  // Tabs sync selection to the URL, so view and sort live there too
+  // Tabs sync selection to the URL, so view and sort live there too;
+  // the sidebar's GROUPS panel drives ?group= and ?label=
   const searchParams = useSearchParams();
   const view =
     searchParams.get("view") === "companies" ? "companies" : "people";
   const sort = searchParams.get("sort") === "frequent" ? "frequent" : "recent";
+  const groupKey = searchParams.get("group");
+  const labelFilter = searchParams.get("label");
 
   const params = new URLSearchParams({ sort, limit: String(limit) });
   if (search) params.set("search", search);
@@ -55,12 +59,29 @@ export function ContactsList() {
   );
 
   const companies = data?.companies ?? [];
+
+  const groups = useMemo(
+    () => groupContacts({ contacts: data?.contacts ?? [], companies }),
+    [data?.contacts, companies],
+  );
+
+  const filteredContacts = useMemo(() => {
+    if (!groupKey) return data?.contacts ?? [];
+    return groups.find((group) => group.key === groupKey)?.contacts ?? [];
+  }, [data?.contacts, groups, groupKey]);
+
+  const activeGroupName = groupKey
+    ? groups.find((group) => group.key === groupKey)?.name
+    : null;
+
   const selected = selectedEmail
     ? (data?.contacts.find((contact) => contact.email === selectedEmail) ??
       null)
     : null;
   const setSelected = (contact: ContactListItem) =>
     setSelectedEmail(contact.email);
+
+  const isWide = useIsWideScreen();
 
   return (
     <div>
@@ -92,49 +113,86 @@ export function ContactsList() {
         </div>
       </div>
 
-      <div className="mt-4">
-        <LoadingContent loading={isLoading && !data} error={error}>
-          {data &&
-            (data.contacts.length || companies.length ? (
-              view === "companies" ? (
-                <CompaniesView
-                  contacts={data.contacts}
-                  companies={companies}
-                  onSelectContact={setSelected}
-                  mutate={mutate}
-                />
-              ) : (
-                <>
-                  <PeopleTable
+      {data && (
+        <p className="mt-2 text-sm text-muted-foreground">
+          {activeGroupName ? (
+            <>
+              Showing <span className="text-foreground">{activeGroupName}</span>{" "}
+              · {filteredContacts.length}{" "}
+              {filteredContacts.length === 1 ? "person" : "people"}
+            </>
+          ) : (
+            <>
+              {data.contacts.length} people ·{" "}
+              {
+                groups.filter(
+                  (group) => group.key !== "personal" && group.key !== "other",
+                ).length
+              }{" "}
+              companies
+            </>
+          )}
+        </p>
+      )}
+
+      <div className="mt-4 flex items-start gap-6">
+        <div className="min-w-0 flex-1">
+          <LoadingContent loading={isLoading && !data} error={error}>
+            {data &&
+              (data.contacts.length || companies.length ? (
+                view === "companies" ? (
+                  <CompaniesView
                     contacts={data.contacts}
                     companies={companies}
-                    onSelect={setSelected}
+                    labelFilter={labelFilter}
+                    onSelectContact={setSelected}
+                    mutate={mutate}
                   />
-                  {data.hasMore && limit < MAX_LIMIT && (
-                    <div className="mt-4 flex justify-center">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setLimit(MAX_LIMIT)}
-                      >
-                        Show more
-                      </Button>
-                    </div>
-                  )}
-                </>
-              )
-            ) : (
-              <p className="py-12 text-center text-sm text-muted-foreground">
-                {search
-                  ? `No contacts match “${search}”.`
-                  : "No contacts yet. They'll appear here as your email history loads."}
-              </p>
-            ))}
-        </LoadingContent>
+                ) : (
+                  <>
+                    <PeopleTable
+                      contacts={filteredContacts}
+                      companies={companies}
+                      onSelect={setSelected}
+                    />
+                    {data.hasMore && limit < MAX_LIMIT && (
+                      <div className="mt-4 flex justify-center">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setLimit(MAX_LIMIT)}
+                        >
+                          Show more
+                        </Button>
+                      </div>
+                    )}
+                  </>
+                )
+              ) : (
+                <p className="py-12 text-center text-sm text-muted-foreground">
+                  {search
+                    ? `No contacts match “${search}”.`
+                    : "No contacts yet. They'll appear here as your email history loads."}
+                </p>
+              ))}
+          </LoadingContent>
+        </div>
+
+        {/* Persistent detail pane on wide screens (the sheet covers the rest) */}
+        {isWide && selected && (
+          <aside className="w-[400px] shrink-0 rounded-lg border border-border p-5">
+            <ContactDetails
+              key={selected.email}
+              contact={selected}
+              companies={companies}
+              mutateContacts={mutate}
+            />
+          </aside>
+        )}
       </div>
 
       <ContactDetailSheet
-        contact={selected}
+        contact={isWide ? null : selected}
         companies={companies}
         onClose={() => setSelectedEmail(null)}
         mutateContacts={mutate}
@@ -303,4 +361,19 @@ export function ContactAvatar({
       {initial}
     </div>
   );
+}
+
+// The persistent detail pane needs real width; below xl the sheet takes over
+function useIsWideScreen() {
+  const [wide, setWide] = useState(false);
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia("(min-width: 1280px)");
+    const update = () => setWide(mediaQuery.matches);
+    update();
+    mediaQuery.addEventListener("change", update);
+    return () => mediaQuery.removeEventListener("change", update);
+  }, []);
+
+  return wide;
 }

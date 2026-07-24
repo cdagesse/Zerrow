@@ -40,20 +40,28 @@ import { ContactAvatar } from "./ContactsList";
 export function CompaniesView({
   contacts,
   companies,
+  labelFilter,
   onSelectContact,
   mutate,
 }: {
   contacts: ContactListItem[];
   companies: CompanySummary[];
+  // Restrict to companies under this label id (from the sidebar's GROUPS)
+  labelFilter?: string | null;
   onSelectContact: (contact: ContactListItem) => void;
   mutate: () => void;
 }) {
   const [editing, setEditing] = useState<CompanySummary | null>(null);
 
-  const groups = useMemo(
-    () => groupContacts({ contacts, companies }),
-    [contacts, companies],
-  );
+  const groups = useMemo(() => {
+    const all = groupContacts({ contacts, companies });
+    if (!labelFilter) return all;
+    return all.filter(
+      (group) =>
+        group.company?.label?.id === labelFilter ||
+        group.company?.label?.parent?.id === labelFilter,
+    );
+  }, [contacts, companies, labelFilter]);
 
   // Labeled companies section by label path ("Factory" then "Factory > …"),
   // then unlabeled companies and auto domain groups, then Personal/Other

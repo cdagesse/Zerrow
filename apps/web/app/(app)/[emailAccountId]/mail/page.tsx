@@ -155,7 +155,7 @@ export default function Mail(props: {
           type="search"
           value={searchInput}
           onChange={(event) => setSearchInput(event.target.value)}
-          placeholder="Search emails"
+          placeholder="Search by name, email, or subject"
           className="h-8 w-full rounded-md border-0 bg-muted pl-8 pr-8 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring [&::-webkit-search-cancel-button]:hidden"
         />
         {searchInput && (

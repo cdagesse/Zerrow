@@ -56,12 +56,12 @@ export function FolderHeader({ labelId }: { labelId: string }) {
   );
 
   return (
-    <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-1.5">
+    <div className="flex items-center justify-between gap-2 border-b border-border px-4 py-2">
       <div className="flex min-w-0 items-center gap-2">
         <Icon className="size-4 shrink-0 text-muted-foreground" />
-        <span className="truncate text-sm font-medium">
+        <h1 className="truncate font-display text-2xl tracking-tight">
           {label?.name.split("/").pop() ?? "Folder"}
-        </span>
+        </h1>
       </div>
       <FolderSettings labelId={labelId} />
     </div>
