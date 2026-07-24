@@ -1,11 +1,8 @@
+// Space-themed brand illustrations (public/images/celebration)
 const urls = [
-  "https://illustrations.popsy.co/amber/app-launch.svg",
-  "https://illustrations.popsy.co/amber/work-party.svg",
-  "https://illustrations.popsy.co/amber/freelancer.svg",
-  "https://illustrations.popsy.co/amber/working-vacation.svg",
-  "https://illustrations.popsy.co/amber/remote-work.svg",
-  "https://illustrations.popsy.co/amber/man-riding-a-rocket.svg",
-  "https://illustrations.popsy.co/amber/backpacking.svg",
+  "/images/celebration/rocket-launch.svg",
+  "/images/celebration/orbit.svg",
+  "/images/celebration/to-the-moon.svg",
 ];
 
 export const getCelebrationImage = () =>

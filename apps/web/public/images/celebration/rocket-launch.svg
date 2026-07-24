@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 400 400" fill="none">
+  <!-- Stars -->
+  <circle cx="60" cy="70" r="3" fill="#E5E7EB" opacity="0.9"/>
+  <circle cx="330" cy="50" r="2.5" fill="#E5E7EB" opacity="0.7"/>
+  <circle cx="290" cy="130" r="2" fill="#9CA3AF" opacity="0.8"/>
+  <circle cx="90" cy="180" r="2" fill="#9CA3AF" opacity="0.6"/>
+  <circle cx="350" cy="220" r="3" fill="#E5E7EB" opacity="0.8"/>
+  <circle cx="40" cy="300" r="2" fill="#6B7280" opacity="0.7"/>
+  <path d="M120 40l2.2 5.8 5.8 2.2-5.8 2.2-2.2 5.8-2.2-5.8-5.8-2.2 5.8-2.2Z" fill="#F4501F" opacity="0.9"/>
+  <path d="M310 300l1.8 4.7 4.7 1.8-4.7 1.8-1.8 4.7-1.8-4.7-4.7-1.8 4.7-1.8Z" fill="#E5E7EB" opacity="0.8"/>
+  <path d="M70 240l1.5 3.9 3.9 1.5-3.9 1.5-1.5 3.9-1.5-3.9-3.9-1.5 3.9-1.5Z" fill="#FBBF24" opacity="0.8"/>
+
+  <!-- Orbit ring hint -->
+  <ellipse cx="200" cy="200" rx="170" ry="60" stroke="#52565E" stroke-width="1.5" opacity="0.35" transform="rotate(-24 200 200)"/>
+
+  <!-- Brand rocket, climbing -->
+  <g transform="translate(200 170) rotate(14) scale(2.1) translate(-28 -29)">
+    <path d="M28 0C22 12 15 28 14 44L14 50L28 58Z" fill="#F4501F"/>
+    <path d="M28 0C34 12 41 28 42 44L42 50L28 58Z" fill="#D93B12"/>
+    <path d="M28 32L17 54L28 47L39 54Z" fill="#52565E"/>
+    <path d="M28 47L22 58L28 54L34 58Z" fill="#141518"/>
+    <path d="M12 36L4 48L4 62L12 54Z" fill="#E8491D"/>
+    <path d="M44 36L52 48L52 62L44 54Z" fill="#C13413"/>
+  </g>
+
+  <!-- Exhaust flame -->
+  <g transform="translate(200 170) rotate(14)">
+    <path d="M0 64C-8 84 -4 104 0 122C4 104 8 84 0 64Z" fill="#F4501F" opacity="0.9"/>
+    <path d="M0 70C-4 84 -2 98 0 110C2 98 4 84 0 70Z" fill="#FBBF24"/>
+  </g>
+
+  <!-- Speed lines -->
+  <path d="M150 268C144 288 140 304 138 320" stroke="#52565E" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+  <path d="M252 258C250 276 246 294 240 312" stroke="#52565E" stroke-width="3" stroke-linecap="round" opacity="0.5"/>
+  <path d="M200 306C199 320 198 332 198 344" stroke="#6B7280" stroke-width="3" stroke-linecap="round" opacity="0.4"/>
+</svg>
