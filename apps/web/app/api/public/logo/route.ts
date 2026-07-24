@@ -4,7 +4,9 @@ import { withError } from "@/utils/middleware";
 import { fetchLogo, normalizeLogoDomain } from "@/utils/logo/fetch-logo";
 
 export const runtime = "nodejs";
-export const maxDuration = 15;
+// Comfortably above the 12s provider budget in fetch-logo.ts — the chain
+// must finish on its own; a platform timeout surfaces as a 5xx
+export const maxDuration = 30;
 
 // Public logo proxy: the browser never talks to the logo providers
 // directly, and the provider chain runs behind SSRF guards because the
@@ -24,9 +26,12 @@ export const GET = withError("logo", async (request) => {
   if (!logo) {
     return NextResponse.json(
       { error: "No logo found" },
-      // Cache misses briefly so a flaky provider can recover, without
-      // hammering the chain on every avatar render
-      { status: 404, headers: { "Cache-Control": "public, max-age=3600" } },
+      // Cache misses briefly (browser and CDN) so a flaky provider can
+      // recover without the chain re-running on every avatar render
+      {
+        status: 404,
+        headers: { "Cache-Control": "public, max-age=3600, s-maxage=3600" },
+      },
     );
   }
 
