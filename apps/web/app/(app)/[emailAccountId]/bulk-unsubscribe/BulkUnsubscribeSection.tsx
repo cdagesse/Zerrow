@@ -46,7 +46,7 @@ import {
 } from "@/app/(app)/[emailAccountId]/bulk-unsubscribe/BulkUnsubscribeDesktop";
 import { BulkUnsubscribeDesktopSkeleton } from "@/app/(app)/[emailAccountId]/bulk-unsubscribe/BulkUnsubscribeSkeleton";
 import { Card } from "@/components/ui/card";
-import { SearchBar } from "@/app/(app)/[emailAccountId]/bulk-unsubscribe/SearchBar";
+import { SearchBar } from "@/components/SearchBar";
 import { useToggleSelect } from "@/hooks/useToggleSelect";
 import { BulkActions } from "@/app/(app)/[emailAccountId]/bulk-unsubscribe/BulkActions";
 import { ArchiveProgress } from "@/app/(app)/[emailAccountId]/bulk-unsubscribe/ArchiveProgress";

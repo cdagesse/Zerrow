@@ -19,6 +19,7 @@ import {
   SendIcon,
   SettingsIcon,
   ShieldIcon,
+  UsersRoundIcon,
 } from "lucide-react";
 import { Logo } from "@/components/Logo";
 import { useComposeModal } from "@/providers/ComposeModalProvider";
@@ -116,6 +117,8 @@ export function SideNav({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarGroupContent>
           <MailNav path={path} />
 
+          <AppsNav path={path} />
+
           <SidebarGroup>
             <SideNavMenu items={bottomItems} activeHref={path} />
           </SidebarGroup>
@@ -128,6 +131,29 @@ export function SideNav({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <NavUser />
       </SidebarFooter>
     </Sidebar>
+  );
+}
+
+// The suite's non-mail apps. Grows as Meetings and Tasks ship.
+function AppsNav({ path }: { path: string }) {
+  const { emailAccountId } = useAccount();
+
+  const items: NavItem[] = useMemo(
+    () => [
+      {
+        name: "Contacts",
+        href: prefixPath(emailAccountId, "/contacts"),
+        icon: UsersRoundIcon,
+      },
+    ],
+    [emailAccountId],
+  );
+
+  return (
+    <SidebarGroup>
+      <SidebarGroupLabel>Apps</SidebarGroupLabel>
+      <SideNavMenu items={items} activeHref={path} />
+    </SidebarGroup>
   );
 }
 

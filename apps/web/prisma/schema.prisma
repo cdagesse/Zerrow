@@ -212,6 +212,7 @@ model EmailAccount {
   filingFolders          FilingFolder[]
   apiKeys                ApiKey[]
   classificationFeedback ClassificationFeedback[]
+  contacts               Contact[]
 
   @@index([userId])
   @@index([lastSummaryEmailAt])
@@ -915,6 +916,24 @@ model EmailMessage {
   @@index([emailAccountId, date])
   @@index([emailAccountId, from])
   @@index([emailAccountId, fromName])
+}
+
+// User-edited contact details. The contacts list itself is derived from
+// EmailMessage; a Contact row exists only once the user adds notes/edits.
+model Contact {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  email   String
+  name    String?
+  company String?
+  notes   String?
+
+  emailAccountId String
+  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([emailAccountId, email])
 }
 
 model ResponseTime {

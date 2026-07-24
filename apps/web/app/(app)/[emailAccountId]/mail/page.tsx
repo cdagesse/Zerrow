@@ -17,12 +17,12 @@ import { useAccount } from "@/providers/EmailAccountProvider";
 import { useInboxStream } from "@/hooks/useInboxStream";
 
 export default function Mail(props: {
-  searchParams: Promise<{ type?: string; labelId?: string }>;
+  searchParams: Promise<{ type?: string; labelId?: string; q?: string }>;
 }) {
   const searchParams = use(props.searchParams);
 
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState(searchParams.q ?? "");
+  const [searchQuery, setSearchQuery] = useState(searchParams.q ?? "");
 
   // Debounce typing so we don't fire a request per keystroke
   useEffect(() => {
@@ -30,12 +30,14 @@ export default function Mail(props: {
     return () => clearTimeout(timeout);
   }, [searchInput]);
 
-  // A stale query would silently filter the new folder; clear it on switch
-  // biome-ignore lint/correctness/useExhaustiveDependencies: only reset when the folder changes
+  // Sync from the URL: switching folders clears any stale query (which would
+  // silently filter the new folder), while arriving with ?q (e.g. from a
+  // contact's "Search in Mail") seeds the search
+  // biome-ignore lint/correctness/useExhaustiveDependencies: folder changes must also reset the search
   useEffect(() => {
-    setSearchInput("");
-    setSearchQuery("");
-  }, [searchParams.type, searchParams.labelId]);
+    setSearchInput(searchParams.q ?? "");
+    setSearchQuery(searchParams.q ?? "");
+  }, [searchParams.type, searchParams.labelId, searchParams.q]);
 
   const getKey = (
     pageIndex: number,

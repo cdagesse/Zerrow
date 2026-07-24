@@ -16,6 +16,7 @@ import {
   BrushIcon,
   ZapIcon,
   MailsIcon,
+  UsersRoundIcon,
 } from "lucide-react";
 import type { Command } from "@/lib/commands/types";
 import { useRules } from "@/hooks/useRules";
@@ -67,6 +68,12 @@ function useNavigationItems(): NavigationItem[] {
         href: prefixPath(emailAccountId, "/calendars"),
         icon: CalendarIcon,
         keywords: ["calendar", "scheduling", "meetings"],
+      },
+      {
+        name: "Contacts",
+        href: prefixPath(emailAccountId, "/contacts"),
+        icon: UsersRoundIcon,
+        keywords: ["contacts", "people", "crm"],
       },
       ...(showIntegrations
         ? [
