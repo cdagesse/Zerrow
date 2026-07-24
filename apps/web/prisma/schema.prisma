@@ -167,6 +167,10 @@ model EmailAccount {
   followUpNeedsReplyDays    Float?
   followUpAutoDraftEnabled  Boolean @default(true)
 
+  googleContactsSyncEnabled Boolean   @default(false)
+  googleContactsSyncToken   String?
+  googleContactsSyncedAt    DateTime?
+
   digestSendEmail     Boolean   @default(true)
   digestSchedule      Schedule?
   learnedWritingStyle String?
@@ -942,10 +946,15 @@ model Contact {
   companyId String?
   company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
+  // Google People API linkage for two-way sync
+  googleResourceName String?
+  googleEtag         String?
+
   emailAccountId String
   emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
 
   @@unique([emailAccountId, email])
+  @@index([emailAccountId, googleResourceName])
 }
 
 // A company groups contacts by its email domains. Contacts with a matching

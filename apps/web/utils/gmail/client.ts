@@ -48,20 +48,23 @@ export function getLinkingOAuth2Client() {
   );
 }
 
-// we should potentially use this everywhere instead of getGmailClient as this handles refreshing the access token and saving it to the db
-export const getGmailClientWithRefresh = async ({
-  accessToken,
-  refreshToken,
-  expiresAt,
-  emailAccountId,
-  logger,
-}: {
+type RefreshOptions = {
   accessToken?: string | null;
   refreshToken: string | null;
   expiresAt: number | null;
   emailAccountId: string;
   logger: Logger;
-}): Promise<gmail_v1.Gmail> => {
+};
+
+// Builds an OAuth2 auth object, refreshing the access token (and persisting
+// it) when it's close to expiry
+const getAuthWithRefresh = async ({
+  accessToken,
+  refreshToken,
+  expiresAt,
+  emailAccountId,
+  logger,
+}: RefreshOptions) => {
   if (!refreshToken) {
     // expected for disconnected accounts
     logger.warn("No refresh token", { emailAccountId });
@@ -70,11 +73,10 @@ export const getGmailClientWithRefresh = async ({
 
   // we handle refresh ourselves so not passing in expiresAt
   const auth = getAuth({ accessToken, refreshToken });
-  const g = gmail({ version: "v1", auth, rootUrl: getGoogleGmailApiRootUrl() });
 
   const expiryDate = expiresAt ? expiresAt : null;
   if (expiryDate && expiryDate > Date.now() + TOKEN_REFRESH_BUFFER_MS) {
-    return g;
+    return auth;
   }
 
   // may throw `invalid_grant` error
@@ -97,7 +99,7 @@ export const getGmailClientWithRefresh = async ({
       });
     }
 
-    return g;
+    return auth;
   } catch (error) {
     if (isInvalidGrantError(error)) {
       logger.warn("Error refreshing Gmail access token", {
@@ -126,6 +128,23 @@ export const getGmailClientWithRefresh = async ({
 
     throw error;
   }
+};
+
+// we should potentially use this everywhere instead of getGmailClient as this handles refreshing the access token and saving it to the db
+export const getGmailClientWithRefresh = async (
+  options: RefreshOptions,
+): Promise<gmail_v1.Gmail> => {
+  const auth = await getAuthWithRefresh(options);
+  return gmail({ version: "v1", auth, rootUrl: getGoogleGmailApiRootUrl() });
+};
+
+export const getContactsClientWithRefresh = async (options: RefreshOptions) => {
+  const auth = await getAuthWithRefresh(options);
+  return people({
+    version: "v1",
+    auth,
+    rootUrl: getGooglePeopleApiRootUrl(),
+  });
 };
 
 // doesn't handle refreshing the access token

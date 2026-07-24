@@ -2,12 +2,20 @@
 
 import { actionClient } from "@/utils/actions/safe-action";
 import { describeError, SafeError } from "@/utils/error";
+import { after } from "next/server";
+import { z } from "zod";
 import {
   createCompanyBody,
   enrichContactBody,
+  setGoogleContactsSyncBody,
   updateCompanyBody,
   updateContactBody,
 } from "@/utils/actions/contact.validation";
+import {
+  pullGoogleContacts,
+  pushContactToGoogle,
+} from "@/utils/contacts-sync/google";
+import type { Logger } from "@/utils/logger";
 import { isPublicEmailDomain } from "@/utils/email";
 import { createEmailProvider } from "@/utils/email/provider";
 import { getEmailAccountWithAiAndTokens } from "@/utils/user/get";
@@ -20,7 +28,7 @@ export const updateContactAction = actionClient
   .inputSchema(updateContactBody)
   .action(
     async ({
-      ctx: { emailAccountId },
+      ctx: { emailAccountId, logger },
       parsedInput: {
         email,
         name,
@@ -62,9 +70,44 @@ export const updateContactAction = actionClient
         create: { emailAccountId, email: normalizedEmail, ...details },
       });
 
+      await maybePushToGoogle({
+        emailAccountId,
+        email: normalizedEmail,
+        logger,
+      });
+
       return { contact };
     },
   );
+
+// Turns Google Contacts two-way sync on/off; enabling kicks off a pull
+export const setGoogleContactsSyncAction = actionClient
+  .metadata({ name: "setGoogleContactsSync" })
+  .inputSchema(setGoogleContactsSyncBody)
+  .action(
+    async ({ ctx: { emailAccountId, logger }, parsedInput: { enabled } }) => {
+      await prisma.emailAccount.update({
+        where: { id: emailAccountId },
+        data: { googleContactsSyncEnabled: enabled },
+      });
+
+      if (enabled) {
+        const result = await pullGoogleContacts({ emailAccountId, logger });
+        return { enabled, ...result };
+      }
+
+      return { enabled };
+    },
+  );
+
+// Manual "Sync now" — pulls from Google immediately
+export const syncGoogleContactsAction = actionClient
+  .metadata({ name: "syncGoogleContacts" })
+  .inputSchema(z.object({}))
+  .action(async ({ ctx: { emailAccountId, logger } }) => {
+    const result = await pullGoogleContacts({ emailAccountId, logger });
+    return result;
+  });
 
 // Reads the contact's recent emails and returns suggested details (name,
 // title, company, phones) for the user to review; only the AI relationship
@@ -281,6 +324,32 @@ async function resolveLabelId({
   });
 
   return label.id;
+}
+
+// Fire-and-forget push of a saved contact to Google when sync is on —
+// a Google hiccup must never fail the local save
+async function maybePushToGoogle({
+  emailAccountId,
+  email,
+  logger,
+}: {
+  emailAccountId: string;
+  email: string;
+  logger: Logger;
+}) {
+  const account = await prisma.emailAccount.findUnique({
+    where: { id: emailAccountId },
+    select: { googleContactsSyncEnabled: true },
+  });
+  if (!account?.googleContactsSyncEnabled) return;
+
+  after(async () => {
+    try {
+      await pushContactToGoogle({ emailAccountId, email, logger });
+    } catch (error) {
+      logger.warn("Failed to push contact to Google", { email, error });
+    }
+  });
 }
 
 function normalizeDomains(domains: string[]): string[] {

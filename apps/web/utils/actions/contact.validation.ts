@@ -22,6 +22,13 @@ export const enrichContactBody = z.object({
 });
 export type EnrichContactBody = z.infer<typeof enrichContactBody>;
 
+export const setGoogleContactsSyncBody = z.object({
+  enabled: z.boolean(),
+});
+export type SetGoogleContactsSyncBody = z.infer<
+  typeof setGoogleContactsSyncBody
+>;
+
 export const createCompanyBody = z.object({
   name: z.string().min(1).max(200),
   domains: z.array(z.string().min(1).max(200)).max(50).optional(),
