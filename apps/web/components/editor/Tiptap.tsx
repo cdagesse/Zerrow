@@ -19,7 +19,7 @@ export const Tiptap = forwardRef<
     initialContent?: string;
     onChange?: (content: string) => void;
     className?: string;
-    autofocus?: boolean;
+    autofocus?: boolean | "start" | "end";
     onMoreClick?: () => void;
     preservePastedLineBreaks?: boolean;
     placeholder?: string;

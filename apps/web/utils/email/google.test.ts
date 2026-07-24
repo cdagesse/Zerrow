@@ -352,6 +352,36 @@ describe("GmailProvider.getLabels", () => {
   });
 });
 
+describe("GmailProvider.sendEmailWithHtml", () => {
+  it("decodes base64 attachments to Buffers for MIME assembly", async () => {
+    gmailMailMock.sendEmailWithHtml.mockResolvedValue({
+      data: { id: "message-1", threadId: "thread-1" },
+    });
+    const provider = new GmailProvider({} as any);
+    const fileBytes = Buffer.from("hello attachment bytes");
+
+    await provider.sendEmailWithHtml({
+      to: "recipient@example.com",
+      subject: "Subject",
+      messageHtml: "<p>hi</p>",
+      attachments: [
+        {
+          filename: "notes.txt",
+          contentType: "text/plain",
+          content: fileBytes.toString("base64"),
+        },
+      ],
+    });
+
+    const sentBody = gmailMailMock.sendEmailWithHtml.mock.calls[0]?.[1];
+    const sentAttachment = sentBody.attachments[0];
+    expect(Buffer.isBuffer(sentAttachment.content)).toBe(true);
+    expect(sentAttachment.content.equals(fileBytes)).toBe(true);
+    expect(sentAttachment.filename).toBe("notes.txt");
+    expect(sentAttachment.contentType).toBe("text/plain");
+  });
+});
+
 describe("GmailProvider.getThreadsWithQuery inbox visibility", () => {
   afterEach(() => {
     vi.clearAllMocks();
@@ -455,6 +485,30 @@ describe("GmailProvider.getThreadsWithQuery inbox visibility", () => {
     });
 
     expect(result.threads.map((thread) => thread.id)).toEqual(["searched"]);
+  });
+
+  it("searches all mail (no INBOX scope) for a bare text query", async () => {
+    setupThreads([{ id: "searched", messageLabelIds: [["Label_1"]] }]);
+    const provider = new GmailProvider({} as any);
+
+    await provider.getThreadsWithQuery({ query: { q: "invoice" } });
+
+    expect(gmailThreadMock.getThreadsWithNextPageToken).toHaveBeenCalledWith(
+      expect.objectContaining({ q: "invoice", labelIds: [] }),
+    );
+  });
+
+  it("keeps the folder scope when searching within an explicit label", async () => {
+    setupThreads([{ id: "searched", messageLabelIds: [["Label_1"]] }]);
+    const provider = new GmailProvider({} as any);
+
+    await provider.getThreadsWithQuery({
+      query: { q: "invoice", type: "label", labelId: "Label_1" },
+    });
+
+    expect(gmailThreadMock.getThreadsWithNextPageToken).toHaveBeenCalledWith(
+      expect.objectContaining({ labelIds: ["Label_1"] }),
+    );
   });
 
   it("passes the requested format through to the thread batch", async () => {

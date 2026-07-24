@@ -9,6 +9,7 @@ import {
   type ProcessHistoryOptions,
 } from "@/utils/webhook/google/types";
 import { processHistoryItem } from "@/utils/webhook/google/process-history-item";
+import { publishNewInboxEmail } from "@/utils/redis/live-inbox";
 import { getHistory } from "@/utils/gmail/history";
 import {
   validateWebhookAccount,
@@ -283,6 +284,22 @@ async function processHistory(options: ProcessHistoryOptions, logger: Logger) {
     emailAccountId,
     lastSyncedHistoryId,
   });
+
+  // Nudge open mail pages to refresh, after rules have run so the refreshed
+  // list already carries plan badges. Best-effort: never block the webhook.
+  const hasNewInboxMessage = history.some((h) =>
+    (h.messagesAdded || []).some((m) => {
+      const labels = m.message?.labelIds;
+      return (
+        labels?.includes(GmailLabel.INBOX) && !labels.includes(GmailLabel.DRAFT)
+      );
+    }),
+  );
+  if (hasNewInboxMessage) {
+    publishNewInboxEmail({ emailAccountId }).catch((error) => {
+      logger.warn("Failed to publish live inbox event", { error });
+    });
+  }
 }
 
 /**

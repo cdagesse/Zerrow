@@ -11,6 +11,8 @@ import { useAccount } from "@/providers/EmailAccountProvider";
 import { MutedText } from "@/components/Typography";
 import { LoadingContent } from "@/components/LoadingContent";
 import { useThread } from "@/hooks/useThread";
+import { useChat } from "@/providers/ChatProvider";
+import { FixWithChat } from "@/app/(app)/[emailAccountId]/assistant/FixWithChat";
 
 export function EmailPanel({
   row,
@@ -29,6 +31,7 @@ export function EmailPanel({
 }) {
   const { provider } = useAccount();
   const isPlanning = useIsInAiQueue(row.id);
+  const { setInput } = useChat();
 
   // The list only carries message metadata; load the full thread (bodies,
   // attachments, drafts) when the panel opens.
@@ -38,6 +41,20 @@ export function EmailPanel({
     error,
     mutate: mutateThread,
   } = useThread({ id: row.id }, { includeDrafts: true });
+
+  // "This was filed wrong" flow: hand the email + what matched to the
+  // assistant chat so the user can correct the rule/folder
+  const fullLastMessage = data?.thread.messages?.at(-1);
+  const fixResults = row.plan?.rule
+    ? [
+        {
+          rule: row.plan.rule,
+          reason: row.plan.reason ?? undefined,
+          status: row.plan.status,
+          createdAt: new Date(row.plan.rule.createdAt),
+        },
+      ]
+    : [];
 
   const refetchThread = useCallback(() => {
     mutateThread();
@@ -64,6 +81,15 @@ export function EmailPanel({
         </div>
 
         <div className="mt-3 flex items-center md:ml-2 md:mt-0">
+          {fullLastMessage && (
+            <div className="mr-1">
+              <FixWithChat
+                setInput={setInput}
+                message={fullLastMessage}
+                results={fixResults}
+              />
+            </div>
+          )}
           <ActionButtons
             threadId={row.id!}
             isPlanning={isPlanning}

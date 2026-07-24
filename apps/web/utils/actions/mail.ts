@@ -332,6 +332,17 @@ export const sendEmailAction = actionClient
   .inputSchema(sendEmailBody)
   .action(
     async ({ ctx: { emailAccountId, provider, logger }, parsedInput }) => {
+      // Attachment content is base64 (~4/3 of the raw size)
+      const attachmentBytes =
+        parsedInput.attachments?.reduce(
+          (sum, attachment) =>
+            sum + Math.floor(attachment.content.length * 0.75),
+          0,
+        ) ?? 0;
+      if (attachmentBytes > 10 * 1024 * 1024) {
+        throw new SafeError("Attachments are too large (max 10MB in total)");
+      }
+
       const emailProvider = await createEmailProvider({
         emailAccountId,
         provider,

@@ -38,6 +38,11 @@ export const metadata: Metadata = {
   },
 };
 
+// Server actions run under the invoking page's segment config. AI-backed
+// actions (generate folder instructions, run rules) need more than the
+// platform default.
+export const maxDuration = 60;
+
 export const viewport = {
   themeColor: "#0A0E17",
   // safe area for iOS PWA

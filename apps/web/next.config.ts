@@ -33,6 +33,11 @@ const nextConfig: NextConfig = {
   experimental:
     isDevelopment || isProductionBuild
       ? {
+          // Compose attachments travel base64-encoded through sendEmailAction;
+          // ~10MB of files inflates to ~14MB of action body
+          serverActions: {
+            bodySizeLimit: "15mb",
+          },
           ...(isDevelopment
             ? {
                 // This app has a large route graph. Avoid front-loading all

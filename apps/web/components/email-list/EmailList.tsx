@@ -43,6 +43,7 @@ export function List({
   emails,
   type,
   labelId,
+  searchQuery,
   refetch,
   showLoadMore,
   isLoadingMore,
@@ -51,6 +52,7 @@ export function List({
   emails: Thread[];
   type?: string;
   labelId?: string;
+  searchQuery?: string;
   refetch: (options?: { removedThreadIds?: string[] }) => void;
   showLoadMore?: boolean;
   isLoadingMore?: boolean;
@@ -142,7 +144,16 @@ export function List({
         />
       ) : (
         <div className="mt-20">
-          {type === "inbox" ? (
+          {searchQuery ? (
+            <div className="px-4 text-center">
+              <div className="font-title text-2xl text-primary">
+                No emails found
+              </div>
+              <p className="mt-2 text-sm text-muted-foreground">
+                Nothing in your mail matches “{searchQuery}”.
+              </p>
+            </div>
+          ) : type === "inbox" ? (
             <Celebration message={"You made it to Inbox Zero!"} />
           ) : (
             <div className="flex items-center justify-center font-title text-2xl text-primary">
@@ -273,6 +284,31 @@ export function EmailList({
       });
     },
     [refetch, emailAccountId, undoSupported, undoArchive],
+  );
+
+  const onDelete = useCallback(
+    (thread: Thread) => {
+      const threadIds = [thread.id];
+      const toastId = toast.loading("Deleting...");
+      deleteEmails({
+        threadIds,
+        onSuccess: () => {
+          refetch({ removedThreadIds: threadIds });
+          toast.success("Deleted!", {
+            id: toastId,
+            action: undoSupported
+              ? { label: "Undo", onClick: () => undoTrash(threadIds) }
+              : undefined,
+          });
+        },
+        onError: () =>
+          toast.error("There was an error deleting the email :(", {
+            id: toastId,
+          }),
+        emailAccountId,
+      });
+    },
+    [refetch, emailAccountId, undoSupported, undoTrash],
   );
 
   const listRef = useRef<HTMLDivElement>(null);
@@ -489,6 +525,7 @@ export function EmailList({
                         onClick={onOpen}
                         onPlanAiAction={onPlanAiAction}
                         onArchive={onArchive}
+                        onDelete={onDelete}
                         refetch={refetch}
                       />
                     );

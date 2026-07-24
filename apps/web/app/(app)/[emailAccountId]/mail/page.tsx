@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState, use } from "react";
+import { useCallback, useEffect, useRef, useState, use } from "react";
 import useSWRInfinite from "swr/infinite";
+import { useSWRConfig } from "swr";
 import { useSetAtom } from "jotai";
 import { SearchIcon, XIcon } from "lucide-react";
 import { List } from "@/components/email-list/EmailList";
@@ -12,6 +13,8 @@ import type { ThreadsResponse } from "@/app/api/threads/route";
 import { refetchEmailListAtom } from "@/store/email";
 import { PermissionsCheck } from "@/app/(app)/[emailAccountId]/PermissionsCheck";
 import { createSearchParams } from "@/utils/url";
+import { useAccount } from "@/providers/EmailAccountProvider";
+import { useInboxStream } from "@/hooks/useInboxStream";
 
 export default function Mail(props: {
   searchParams: Promise<{ type?: string; labelId?: string }>;
@@ -42,10 +45,11 @@ export default function Mail(props: {
 
     const query: ThreadsQuery = {};
 
-    if (searchQuery) query.q = searchQuery;
-
-    // Handle different query params
-    if (searchParams.type === "label" && searchParams.labelId) {
+    // Search spans all mail — keeping the folder filter would hide matches
+    // that were archived or filed elsewhere
+    if (searchQuery) {
+      query.q = searchQuery;
+    } else if (searchParams.type === "label" && searchParams.labelId) {
       query.labelId = searchParams.labelId;
     } else if (searchParams.type) {
       query.type = searchParams.type;
@@ -116,6 +120,22 @@ export default function Mail(props: {
     setRefetchEmailList({ refetch });
   }, [refetch, setRefetchEmailList]);
 
+  // Live updates: refresh instantly when the server reports new inbox mail.
+  // The 30s poll stays as the fallback when the stream isn't available.
+  const { emailAccountId } = useAccount();
+  const { mutate: globalMutate } = useSWRConfig();
+  const lastLiveRefreshRef = useRef(0);
+  useInboxStream({
+    emailAccountId,
+    onNewMail: useCallback(() => {
+      // A burst of webhook events shouldn't trigger a request per event
+      if (Date.now() - lastLiveRefreshRef.current < 3000) return;
+      lastLiveRefreshRef.current = Date.now();
+      mutate();
+      globalMutate("/api/labels/counts");
+    }, [mutate, globalMutate]),
+  });
+
   const handleLoadMore = useCallback(() => {
     setSize((size) => size + 1);
   }, [setSize]);
@@ -158,6 +178,7 @@ export default function Mail(props: {
             refetch={refetch}
             type={searchParams.type}
             labelId={searchParams.labelId}
+            searchQuery={searchQuery}
             showLoadMore={showLoadMore}
             handleLoadMore={handleLoadMore}
             isLoadingMore={isLoadingMore}
