@@ -56,7 +56,18 @@ async function getContacts({
 
   const saved = await prisma.contact.findMany({
     where: { emailAccountId },
-    select: { email: true, name: true, company: true, notes: true },
+    select: {
+      email: true,
+      name: true,
+      title: true,
+      phone: true,
+      notes: true,
+      aiSummary: true,
+      photoUrl: true,
+      useCompanyLogo: true,
+      isPersonal: true,
+      companyId: true,
+    },
   });
 
   // Saved contacts whose activity fell outside the search/limit window would
@@ -75,15 +86,38 @@ async function getContacts({
     );
   }
 
+  const companies = await prisma.company.findMany({
+    where: { emailAccountId },
+    select: {
+      id: true,
+      name: true,
+      domains: true,
+      logoUrl: true,
+      label: {
+        select: {
+          id: true,
+          name: true,
+          parent: { select: { id: true, name: true } },
+        },
+      },
+    },
+    orderBy: { name: "asc" },
+  });
+
+  const companyNameById = new Map(companies.map((c) => [c.id, c.name]));
   const contacts = mergeContactActivity({ activity, saved }).filter(
     (contact) =>
       !searchTerm ||
       contact.email.includes(searchTerm) ||
       contact.name?.toLowerCase().includes(searchTerm) ||
-      contact.company?.toLowerCase().includes(searchTerm),
+      (contact.companyId &&
+        companyNameById
+          .get(contact.companyId)
+          ?.toLowerCase()
+          .includes(searchTerm)),
   );
 
-  return { contacts, hasMore };
+  return { contacts, companies, hasMore };
 }
 
 async function queryContactActivity({

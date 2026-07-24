@@ -15,10 +15,8 @@ import {
   FileIcon,
   InboxIcon,
   type LucideIcon,
-  MailsIcon,
   PenIcon,
   SendIcon,
-  SettingsIcon,
   ShieldIcon,
   UsersRoundIcon,
 } from "lucide-react";
@@ -51,6 +49,7 @@ import { NavUser } from "@/components/NavUser";
 import { PremiumCard } from "@/components/PremiumCard";
 import { Tooltip } from "@/components/Tooltip";
 import { cn } from "@/utils";
+import { APPS, getActiveAppId, getAppHref } from "@/utils/apps";
 
 type NavItem = {
   name: string;
@@ -72,129 +71,109 @@ const mailFolders = [
 
 export function SideNav({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const path = usePathname();
-  const { data: user } = useUser();
+  const { state, isMobile } = useSidebar();
+  const expanded = state.includes("left-sidebar");
 
-  const bottomItems: NavItem[] = useMemo(
-    () => [
-      {
-        name: "Settings",
-        href: "/settings",
-        icon: SettingsIcon,
-      },
-      ...(user?.isAdmin
-        ? [
-            {
-              name: "Admin",
-              href: "/admin",
-              icon: ShieldIcon,
-            },
-          ]
-        : []),
-    ],
-    [user?.isAdmin],
-  );
-
-  const { state } = useSidebar();
+  // Mobile keeps the plain vertical sheet (apps live in the bottom tray);
+  // desktop gets an icon rail with the contextual nav beside it
+  if (isMobile) {
+    return (
+      <Sidebar collapsible="icon" {...props}>
+        <SideNavBody path={path} />
+      </Sidebar>
+    );
+  }
 
   return (
     <Sidebar collapsible="icon" {...props}>
-      <SidebarHeader className="gap-0 pb-0">
-        {state.includes("left-sidebar") ? (
-          <div className="flex items-center rounded-md pl-2 pr-0.5 py-3 text-foreground justify-between">
-            <Link href="/mail">
-              <Logo className="h-3.5" />
-            </Link>
-            <SidebarTrigger name="left-sidebar" />
-          </div>
-        ) : (
-          <div className="pb-2">
-            <SidebarTrigger name="left-sidebar" />
+      <div className="flex h-full min-h-0">
+        <AppRail path={path} />
+        {expanded && (
+          <div className="flex h-full min-w-0 flex-1 flex-col">
+            <SideNavBody path={path} />
           </div>
         )}
-        <AccountSwitcher />
-        <AppTray path={path} />
-      </SidebarHeader>
-
-      <SidebarContent>
-        {state.includes("left-sidebar") ? <SetupProgressCard /> : null}
-
-        <SidebarGroupContent>
-          {getActiveAppId(path) === "contacts" ? (
-            <ContactsNav path={path} />
-          ) : (
-            <MailNav path={path} />
-          )}
-
-          <SidebarGroup>
-            <SideNavMenu items={bottomItems} activeHref={path} />
-          </SidebarGroup>
-        </SidebarGroupContent>
-      </SidebarContent>
-
-      <PremiumCard isCollapsed={!state.includes("left-sidebar")} />
-
-      <SidebarFooter className="pb-4">
-        <NavUser />
-      </SidebarFooter>
+      </div>
     </Sidebar>
   );
 }
 
-// The suite's apps. Grows as Meetings and Tasks ship.
-const APPS = [
-  { id: "mail", name: "Mail", icon: MailsIcon, path: "/mail" },
-  { id: "contacts", name: "Contacts", icon: UsersRoundIcon, path: "/contacts" },
-] as const;
+// Header + contextual nav + footer. Shared between the mobile sheet and the
+// content column beside the desktop rail.
+function SideNavBody({ path }: { path: string }) {
+  const { data: user } = useUser();
+  const activeApp = getActiveAppId(path);
 
-function getActiveAppId(path: string): (typeof APPS)[number]["id"] | null {
-  if (path.includes("/contacts")) return "contacts";
-  if (path.includes("/mail") || path.includes("/compose")) return "mail";
-  return null;
+  const bottomItems: NavItem[] = useMemo(
+    () =>
+      user?.isAdmin
+        ? [{ name: "Admin", href: "/admin", icon: ShieldIcon }]
+        : [],
+    [user?.isAdmin],
+  );
+
+  return (
+    <>
+      <SidebarHeader className="gap-0 pb-0">
+        <div className="flex items-center rounded-md pl-2 pr-0.5 py-3 text-foreground">
+          <Link href="/mail">
+            <Logo className="h-3.5" />
+          </Link>
+        </div>
+        <AccountSwitcher />
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SetupProgressCard />
+
+        <SidebarGroupContent>
+          {activeApp === "contacts" ? (
+            <ContactsNav path={path} />
+          ) : activeApp === "settings" ? null : (
+            <MailNav path={path} />
+          )}
+
+          {bottomItems.length > 0 && (
+            <SidebarGroup>
+              <SideNavMenu items={bottomItems} activeHref={path} />
+            </SidebarGroup>
+          )}
+        </SidebarGroupContent>
+      </SidebarContent>
+
+      <PremiumCard isCollapsed={false} />
+
+      <SidebarFooter className="pb-4">
+        <NavUser />
+      </SidebarFooter>
+    </>
+  );
 }
 
-function AppTray({ path }: { path: string }) {
+// Vertical icon-only app switcher on the left edge of the sidebar (desktop)
+function AppRail({ path }: { path: string }) {
   const { emailAccountId } = useAccount();
-  const { state, closeMobileSidebar } = useSidebar();
-  const collapsed = !state.includes("left-sidebar");
   const activeApp = getActiveAppId(path);
 
   return (
-    <div
-      className={cn(
-        "mt-2 flex gap-1",
-        collapsed ? "flex-col items-center" : "flex-row",
-      )}
-    >
-      {APPS.map((app) => {
-        const link = (
+    <div className="flex h-full w-12 shrink-0 flex-col items-center gap-1 border-r border-sidebar-border py-2">
+      {APPS.map((app) => (
+        <Tooltip key={app.id} content={app.name}>
           <Link
-            key={app.id}
-            href={prefixPath(emailAccountId, app.path)}
-            onClick={() => closeMobileSidebar("left-sidebar")}
+            href={getAppHref(emailAccountId, app)}
             className={cn(
-              "flex flex-col items-center justify-center gap-1 rounded-md py-1.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-              collapsed ? "size-8" : "flex-1",
+              "flex size-9 items-center justify-center rounded-md text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
               app.id === activeApp &&
                 "bg-sidebar-accent text-sidebar-accent-foreground",
             )}
           >
-            <app.icon className="size-4" />
-            {!collapsed && (
-              <span className="text-[10px] font-medium leading-none">
-                {app.name}
-              </span>
-            )}
+            <app.icon className="size-5" />
+            <span className="sr-only">{app.name}</span>
           </Link>
-        );
-
-        return collapsed ? (
-          <Tooltip key={app.id} content={app.name}>
-            {link}
-          </Tooltip>
-        ) : (
-          link
-        );
-      })}
+        </Tooltip>
+      ))}
+      <div className="flex-1" />
+      <SidebarTrigger name="left-sidebar" />
     </div>
   );
 }

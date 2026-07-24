@@ -1,0 +1,369 @@
+"use client";
+
+import { useMemo, useState } from "react";
+import { useAction } from "next-safe-action/hooks";
+import { useForm } from "react-hook-form";
+import {
+  BuildingIcon,
+  ChevronDownIcon,
+  ChevronRightIcon,
+  PencilIcon,
+  PlusIcon,
+  UserIcon,
+} from "lucide-react";
+import {
+  type CompanySummary,
+  type ContactGroup,
+  type ContactListItem,
+  groupContacts,
+} from "@/utils/contacts";
+import {
+  createCompanyAction,
+  updateCompanyAction,
+} from "@/utils/actions/contact";
+import type { UpdateCompanyBody } from "@/utils/actions/contact.validation";
+import { useAccount } from "@/providers/EmailAccountProvider";
+import { getActionErrorMessage } from "@/utils/error";
+import { toastError, toastSuccess } from "@/components/Toast";
+import { Badge } from "@/components/Badge";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { ContactAvatar } from "./ContactsList";
+
+export function CompaniesView({
+  contacts,
+  companies,
+  onSelectContact,
+  mutate,
+}: {
+  contacts: ContactListItem[];
+  companies: CompanySummary[];
+  onSelectContact: (contact: ContactListItem) => void;
+  mutate: () => void;
+}) {
+  const [editing, setEditing] = useState<CompanySummary | null>(null);
+
+  const groups = useMemo(
+    () => groupContacts({ contacts, companies }),
+    [contacts, companies],
+  );
+
+  // Labeled companies section by label path ("Factory" then "Factory > …"),
+  // then unlabeled companies and auto domain groups, then Personal/Other
+  const sections = useMemo(() => {
+    const byLabel = new Map<string, ContactGroup[]>();
+    const unlabeled: ContactGroup[] = [];
+    const special: ContactGroup[] = [];
+
+    for (const group of groups) {
+      if (group.key === "personal" || group.key === "other") {
+        special.push(group);
+      } else if (group.company?.label) {
+        const label = group.company.label;
+        const path = label.parent
+          ? `${label.parent.name} › ${label.name}`
+          : label.name;
+        byLabel.set(path, [...(byLabel.get(path) ?? []), group]);
+      } else {
+        unlabeled.push(group);
+      }
+    }
+
+    return [
+      ...[...byLabel.entries()]
+        .sort(([a], [b]) => a.localeCompare(b))
+        .map(([title, list]) => ({ title, groups: list })),
+      ...(unlabeled.length ? [{ title: "Companies", groups: unlabeled }] : []),
+      ...special.map((group) => ({ title: group.name, groups: [group] })),
+    ];
+  }, [groups]);
+
+  return (
+    <div className="space-y-6">
+      {sections.map((section) => (
+        <div key={section.title}>
+          <h3 className="mb-2 text-sm font-medium text-muted-foreground">
+            {section.title}
+          </h3>
+          <div className="space-y-2">
+            {section.groups.map((group) => (
+              <CompanyRow
+                key={group.key}
+                group={group}
+                companies={companies}
+                onSelectContact={onSelectContact}
+                onEdit={
+                  group.company ? () => setEditing(group.company) : undefined
+                }
+                mutate={mutate}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
+
+      {editing && (
+        <CompanyEditDialog
+          company={editing}
+          onClose={() => setEditing(null)}
+          mutate={mutate}
+        />
+      )}
+    </div>
+  );
+}
+
+function CompanyRow({
+  group,
+  companies,
+  onSelectContact,
+  onEdit,
+  mutate,
+}: {
+  group: ContactGroup;
+  companies: CompanySummary[];
+  onSelectContact: (contact: ContactListItem) => void;
+  onEdit?: () => void;
+  mutate: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const { emailAccountId } = useAccount();
+
+  const isVirtualDomain = group.key.startsWith("domain:");
+  const create = useAction(createCompanyAction.bind(null, emailAccountId), {
+    onSuccess: () => {
+      toastSuccess({ description: "Company saved" });
+      mutate();
+    },
+    onError: (error) => {
+      toastError({ description: getActionErrorMessage(error.error) });
+    },
+  });
+
+  return (
+    <div className="rounded-lg border border-border">
+      <div className="flex items-center gap-3 p-3">
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 items-center gap-3 text-left"
+          onClick={() => setOpen(!open)}
+        >
+          {open ? (
+            <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
+          )}
+          {group.logoUrl ? (
+            // biome-ignore lint/performance/noImgElement: external logos, not build assets
+            <img
+              src={group.logoUrl}
+              alt=""
+              width={32}
+              height={32}
+              className="size-8 shrink-0 rounded-md bg-muted object-cover p-0.5"
+            />
+          ) : (
+            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+              {group.key === "personal" ? (
+                <UserIcon className="size-4" />
+              ) : (
+                <BuildingIcon className="size-4" />
+              )}
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="truncate font-medium">{group.name}</div>
+            <div className="truncate text-sm text-muted-foreground">
+              {group.contacts.length}{" "}
+              {group.contacts.length === 1 ? "person" : "people"}
+              {group.domains.length > 0 && <> · {group.domains.join(", ")}</>}
+            </div>
+          </div>
+        </button>
+        {group.company?.label && (
+          <Badge color="blue">{group.company.label.name}</Badge>
+        )}
+        {onEdit && (
+          <Button variant="ghost" size="iconSm" onClick={onEdit}>
+            <span className="sr-only">Edit company</span>
+            <PencilIcon className="size-4" />
+          </Button>
+        )}
+        {isVirtualDomain && (
+          <Button
+            variant="outline"
+            size="sm"
+            loading={create.isExecuting}
+            onClick={() =>
+              create.execute({ name: group.name, domains: group.domains })
+            }
+          >
+            <PlusIcon className="mr-1.5 size-3.5" />
+            Save as company
+          </Button>
+        )}
+      </div>
+
+      {open && (
+        <div className="border-t border-border">
+          {group.contacts.length ? (
+            group.contacts.map((contact) => (
+              <button
+                key={contact.email}
+                type="button"
+                className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/50"
+                onClick={() => onSelectContact(contact)}
+              >
+                <ContactAvatar contact={contact} companies={companies} />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium">
+                    {contact.name || contact.email}
+                    {contact.stale && (
+                      <Badge className="ml-2" color="yellow">
+                        Stale
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="truncate text-sm text-muted-foreground">
+                    {[contact.email, contact.title].filter(Boolean).join(" · ")}
+                  </div>
+                </div>
+              </button>
+            ))
+          ) : (
+            <p className="px-3 py-2 text-sm text-muted-foreground">
+              No contacts yet.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function CompanyEditDialog({
+  company,
+  onClose,
+  mutate,
+}: {
+  company: CompanySummary;
+  onClose: () => void;
+  mutate: () => void;
+}) {
+  const { emailAccountId } = useAccount();
+
+  const { register, handleSubmit } = useForm<{
+    name: string;
+    domains: string;
+    logoUrl: string;
+    labelName: string;
+    labelParentName: string;
+  }>({
+    defaultValues: {
+      name: company.name,
+      domains: company.domains.join(", "),
+      logoUrl: company.logoUrl ?? "",
+      labelName: company.label?.name ?? "",
+      labelParentName: company.label?.parent?.name ?? "",
+    },
+  });
+
+  const update = useAction(updateCompanyAction.bind(null, emailAccountId), {
+    onSuccess: () => {
+      toastSuccess({ description: "Company saved" });
+      mutate();
+      onClose();
+    },
+    onError: (error) => {
+      toastError({ description: getActionErrorMessage(error.error) });
+    },
+  });
+
+  const onSubmit = handleSubmit((values) => {
+    const body: Omit<UpdateCompanyBody, "id"> & { id: string } = {
+      id: company.id,
+      name: values.name.trim(),
+      domains: values.domains
+        .split(",")
+        .map((domain) => domain.trim())
+        .filter(Boolean),
+      logoUrl: values.logoUrl.trim(),
+      labelName: values.labelName.trim(),
+      labelParentName: values.labelParentName.trim(),
+    };
+    update.execute(body);
+  });
+
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Edit company</DialogTitle>
+        </DialogHeader>
+        <form className="space-y-4" onSubmit={onSubmit}>
+          <div>
+            <Label htmlFor="company-name">Name</Label>
+            <Input id="company-name" className="mt-2" {...register("name")} />
+          </div>
+          <div>
+            <Label htmlFor="company-domains">Email domains</Label>
+            <Input
+              id="company-domains"
+              className="mt-2"
+              placeholder="toyota.com, lexus.com"
+              {...register("domains")}
+            />
+            <p className="mt-1 text-sm text-muted-foreground">
+              Everyone emailing from these domains is grouped under this
+              company. Separate with commas.
+            </p>
+          </div>
+          <div>
+            <Label htmlFor="company-logo">Logo URL</Label>
+            <Input
+              id="company-logo"
+              className="mt-2"
+              placeholder="Leave empty to use the domain's logo"
+              {...register("logoUrl")}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <Label htmlFor="company-label">Label</Label>
+              <Input
+                id="company-label"
+                className="mt-2"
+                placeholder="e.g. Factory"
+                {...register("labelName")}
+              />
+            </div>
+            <div>
+              <Label htmlFor="company-label-parent">Parent label</Label>
+              <Input
+                id="company-label-parent"
+                className="mt-2"
+                placeholder="Optional"
+                {...register("labelParentName")}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" loading={update.isExecuting}>
+              Save
+            </Button>
+          </div>
+        </form>
+      </DialogContent>
+    </Dialog>
+  );
+}
