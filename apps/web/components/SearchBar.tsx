@@ -9,9 +9,11 @@ import { cn } from "@/utils";
 export function SearchBar({
   onSearch,
   className,
+  placeholder = "Search...",
 }: {
   onSearch: (search: string) => void;
   className?: string;
+  placeholder?: string;
 }) {
   const throttledSearch = useCallback(
     throttle((value: string) => {
@@ -25,7 +27,7 @@ export function SearchBar({
       <SearchIcon className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
       <Input
         type="text"
-        placeholder="Search..."
+        placeholder={placeholder}
         className="pl-9"
         onChange={(e) => throttledSearch(e.target.value)}
       />

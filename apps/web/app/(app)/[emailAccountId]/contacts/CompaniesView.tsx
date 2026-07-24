@@ -97,10 +97,10 @@ export function CompaniesView({
     <div className="space-y-6">
       {sections.map((section) => (
         <div key={section.title}>
-          <h3 className="mb-2 text-sm font-medium text-muted-foreground">
+          <h3 className="mb-2 text-[11px] font-medium uppercase tracking-[0.15em] text-muted-foreground/70">
             {section.title}
           </h3>
-          <div className="space-y-2">
+          <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
             {section.groups.map((group) => (
               <CompanyRow
                 key={group.key}
@@ -156,18 +156,13 @@ function CompanyRow({
   });
 
   return (
-    <div className="rounded-lg border border-border">
-      <div className="flex items-center gap-3 p-3">
+    <div className="bg-background">
+      <div className="flex items-center gap-3 px-3 py-2">
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
           onClick={() => setOpen(!open)}
         >
-          {open ? (
-            <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
-          ) : (
-            <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
-          )}
           {group.logoUrl ? (
             // biome-ignore lint/performance/noImgElement: external logos, not build assets
             <img
@@ -175,25 +170,30 @@ function CompanyRow({
               alt=""
               width={32}
               height={32}
-              className="size-8 shrink-0 rounded-md bg-muted object-cover p-0.5"
+              className="size-7 shrink-0 rounded bg-muted object-cover p-0.5"
             />
           ) : (
-            <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted">
+            <div className="flex size-7 shrink-0 items-center justify-center rounded bg-muted">
               {group.key === "personal" ? (
-                <UserIcon className="size-4" />
+                <UserIcon className="size-3.5" />
               ) : (
-                <BuildingIcon className="size-4" />
+                <BuildingIcon className="size-3.5" />
               )}
             </div>
           )}
-          <div className="min-w-0">
-            <div className="truncate font-medium">{group.name}</div>
-            <div className="truncate text-sm text-muted-foreground">
-              {group.contacts.length}{" "}
-              {group.contacts.length === 1 ? "person" : "people"}
-              {group.domains.length > 0 && <> · {group.domains.join(", ")}</>}
-            </div>
-          </div>
+          <span className="truncate text-sm font-semibold uppercase tracking-wide">
+            {group.name}
+          </span>
+          <span className="hidden min-w-0 truncate text-sm text-muted-foreground sm:inline">
+            {group.domains.join(", ")}
+            {group.domains.length > 0 && " · "}
+            {group.contacts.length}
+          </span>
+          {open ? (
+            <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
+          )}
         </button>
         {group.company?.label && (
           <Badge color="blue">{group.company.label.name}</Badge>
