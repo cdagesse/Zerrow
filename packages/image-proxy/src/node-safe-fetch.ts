@@ -110,6 +110,11 @@ async function fetchWithPinnedLookup(
   const method = init?.method || "GET";
   const requestFn =
     resolvedUrl.url.protocol === "https:" ? httpsRequest : httpRequest;
+  const signal = init?.signal ?? undefined;
+
+  if (signal?.aborted) {
+    throw abortError();
+  }
 
   return new Promise<Response>((resolve, reject) => {
     const request = requestFn(
@@ -155,7 +160,25 @@ async function fetchWithPinnedLookup(
     );
 
     request.on("error", reject);
+
+    // Destroying the request also tears down a still-streaming response
+    // body, so a timeout signal bounds the whole transfer, not just the
+    // wait for headers
+    signal?.addEventListener(
+      "abort",
+      () => {
+        request.destroy(abortError());
+      },
+      { once: true },
+    );
+
     request.end();
+  });
+}
+
+function abortError() {
+  return Object.assign(new Error("The operation was aborted"), {
+    name: "AbortError",
   });
 }
 

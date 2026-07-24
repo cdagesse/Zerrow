@@ -74,6 +74,9 @@ export function CompanyDetails({
             alt=""
             width={48}
             height={48}
+            onError={(event) => {
+              event.currentTarget.style.visibility = "hidden";
+            }}
             className="size-12 shrink-0 rounded-lg bg-muted object-cover p-1"
           />
         ) : (
@@ -216,6 +219,9 @@ function LogoPicker({
                   alt={`${domain} logo`}
                   width={40}
                   height={40}
+                  onError={(event) => {
+                    event.currentTarget.style.visibility = "hidden";
+                  }}
                   className="size-9 object-cover"
                 />
                 {selected && (

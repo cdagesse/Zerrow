@@ -490,10 +490,13 @@ export function ContactAvatar({
   companies: CompanySummary[];
   className?: string;
 }) {
+  // The logo proxy 404s when no provider has an image — fall back to the
+  // initial instead of a broken-image glyph
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const src = contactAvatarUrl(contact, companies);
   const initial = (contact.name || contact.email).charAt(0).toUpperCase();
 
-  if (src) {
+  if (src && src !== failedSrc) {
     return (
       // biome-ignore lint/performance/noImgElement: external favicons/photos, not build assets
       <img
@@ -501,6 +504,7 @@ export function ContactAvatar({
         alt=""
         width={32}
         height={32}
+        onError={() => setFailedSrc(src)}
         className={
           className ??
           "size-8 shrink-0 rounded-full bg-muted object-cover p-0.5"
