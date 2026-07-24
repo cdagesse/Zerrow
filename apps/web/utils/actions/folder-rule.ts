@@ -1,107 +1,16 @@
 "use server";
 
-import prisma from "@/utils/prisma";
 import { actionClient } from "@/utils/actions/safe-action";
 import { SafeError } from "@/utils/error";
-import { ActionType } from "@/generated/prisma/enums";
-import {
-  saveFolderRuleBody,
-  generateFolderInstructionsBody,
-} from "@/utils/actions/folder-rule.validation";
-import { createRuleWithResolvedActions } from "@/utils/rule/rule";
-import {
-  getBlockedLowTrustStaticFromActionTypes,
-  LOW_TRUST_STATIC_FROM_OUTBOUND_MESSAGE,
-} from "@/utils/rule/static-from-risk";
+import { generateFolderInstructionsBody } from "@/utils/actions/folder-rule.validation";
 import { createEmailProvider } from "@/utils/email/provider";
 import { getEmailAccountWithAiAndTokens } from "@/utils/user/get";
 import { getEmailForLLM } from "@/utils/get-email-from-message";
 import { aiGenerateFolderInstructions } from "@/utils/ai/label/generate-folder-instructions";
 import { isDefined } from "@/utils/types";
 
-// Saves the rule that files emails into a folder (the folder drawer's "AI
-// filing" section). Only the fields the drawer owns are written on update —
-// the rule's actions and any other conditions stay untouched.
-export const saveFolderRuleAction = actionClient
-  .metadata({ name: "saveFolderRule" })
-  .inputSchema(saveFolderRuleBody)
-  .action(
-    async ({
-      ctx: { emailAccountId },
-      parsedInput: {
-        labelId,
-        labelName,
-        enabled,
-        instructions,
-        from,
-        conditionalOperator,
-      },
-    }) => {
-      const trimmedInstructions = instructions?.trim() || null;
-      const trimmedFrom = from?.trim() || null;
-
-      const existing = await prisma.rule.findFirst({
-        where: {
-          emailAccountId,
-          actions: { some: { labelId, type: ActionType.LABEL } },
-        },
-        select: {
-          id: true,
-          organizationRuleId: true,
-          actions: { select: { type: true } },
-        },
-        orderBy: { createdAt: "asc" },
-      });
-
-      if (existing) {
-        if (existing.organizationRuleId) {
-          throw new SafeError(
-            "This folder is filed by an organization-managed rule. Edit it from the Assistant page.",
-          );
-        }
-
-        const blocked = getBlockedLowTrustStaticFromActionTypes(
-          trimmedFrom,
-          existing.actions.map((action) => action.type),
-        );
-        if (blocked.length) {
-          throw new SafeError(LOW_TRUST_STATIC_FROM_OUTBOUND_MESSAGE, 400);
-        }
-
-        await prisma.rule.update({
-          where: { id: existing.id, emailAccountId },
-          data: {
-            enabled,
-            instructions: trimmedInstructions,
-            from: trimmedFrom,
-            conditionalOperator,
-          },
-        });
-
-        return { ruleId: existing.id };
-      }
-
-      const name = await findAvailableRuleName(emailAccountId, labelName);
-
-      const rule = await createRuleWithResolvedActions({
-        emailAccountId,
-        data: {
-          name,
-          enabled,
-          instructions: trimmedInstructions,
-          from: trimmedFrom,
-          conditionalOperator,
-          runOnThreads: false,
-        },
-        actions: [{ type: ActionType.LABEL, label: labelName, labelId }],
-      });
-
-      return { ruleId: rule.id };
-    },
-  );
-
 // Drafts filing instructions by reading what's already in the folder. Returns
-// a draft for the user to review — nothing is saved here.
+// a draft for the user to review in the rule editor — nothing is saved here.
 export const generateFolderInstructionsAction = actionClient
   .metadata({ name: "generateFolderInstructions" })
   .inputSchema(generateFolderInstructionsBody)
@@ -189,22 +98,4 @@ function describeError(error: unknown): string {
     }
   }
   return String(error).slice(0, 200);
-}
-
-async function findAvailableRuleName(
-  emailAccountId: string,
-  labelName: string,
-) {
-  const base = `Label: ${labelName}`;
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const name = attempt === 0 ? base : `${base} (${attempt + 1})`;
-    const clash = await prisma.rule.findUnique({
-      where: { name_emailAccountId: { name, emailAccountId } },
-      select: { id: true },
-    });
-    if (!clash) return name;
-  }
-  throw new SafeError(
-    `Too many rules named "${base}". Rename one on the Assistant page first.`,
-  );
 }

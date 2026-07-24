@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import useSWR from "swr";
+import dynamic from "next/dynamic";
 import { useAction } from "next-safe-action/hooks";
-import { SettingsIcon, SparklesIcon } from "lucide-react";
+import { PencilIcon, PlusIcon, SettingsIcon, SparklesIcon } from "lucide-react";
 import type { UserLabelsResponse } from "@/app/api/user/labels/route";
 import type { FolderRuleResponse } from "@/app/api/user/rules/label/[labelId]/route";
 import { Button } from "@/components/ui/button";
@@ -15,9 +16,7 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet";
-import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { LoadingContent } from "@/components/LoadingContent";
 import { Tooltip } from "@/components/Tooltip";
@@ -28,15 +27,23 @@ import {
   updateLabelAction,
   updateLabelVisibilityAction,
 } from "@/utils/actions/mail";
-import {
-  generateFolderInstructionsAction,
-  saveFolderRuleAction,
-} from "@/utils/actions/folder-rule";
+import { generateFolderInstructionsAction } from "@/utils/actions/folder-rule";
+import { toggleRuleAction } from "@/utils/actions/rule";
+import type { CreateRuleBody } from "@/utils/actions/rule.validation";
 import { getActionErrorMessage } from "@/utils/error";
 import { isGoogleProvider } from "@/utils/email/provider-types";
 import { LABEL_ICONS, getLabelIcon } from "@/utils/label-icons";
 import { cn } from "@/utils";
-import { LogicalOperator } from "@/generated/prisma/enums";
+import { ActionType, LogicalOperator } from "@/generated/prisma/enums";
+import { ConditionType } from "@/utils/config";
+
+// The assistant's rule editor — loaded on demand so the mail page doesn't
+// carry it until a rule is actually opened
+const RuleDialog = dynamic(() =>
+  import("@/app/(app)/[emailAccountId]/assistant/RuleDialog").then(
+    (mod) => mod.RuleDialog,
+  ),
+);
 
 // Header row for label folder views: folder name plus the settings gear.
 // Rendered above the list so it's available even when the folder is empty.
@@ -61,27 +68,62 @@ export function FolderHeader({ labelId }: { labelId: string }) {
   );
 }
 
+type RuleEditorConfig = {
+  ruleId?: string;
+  initialRule?: Partial<CreateRuleBody>;
+};
+
 export function FolderSettings({ labelId }: { labelId: string }) {
   const [open, setOpen] = useState(false);
+  // The rule editor must live outside the Sheet: opening a dialog from
+  // inside would unmount with the sheet and never show
+  const [ruleEditor, setRuleEditor] = useState<RuleEditorConfig | null>(null);
 
   return (
-    <Sheet open={open} onOpenChange={setOpen}>
-      <Tooltip content="Folder settings">
-        <SheetTrigger asChild>
-          <Button variant="ghost" size="iconSm">
-            <span className="sr-only">Folder settings</span>
-            <SettingsIcon className="size-4" />
-          </Button>
-        </SheetTrigger>
-      </Tooltip>
-      <SheetContent side="right" className="overflow-y-auto">
-        {open && <FolderSettingsContent labelId={labelId} />}
-      </SheetContent>
-    </Sheet>
+    <>
+      <Sheet open={open} onOpenChange={setOpen}>
+        <Tooltip content="Folder settings">
+          <SheetTrigger asChild>
+            <Button variant="ghost" size="iconSm">
+              <span className="sr-only">Folder settings</span>
+              <SettingsIcon className="size-4" />
+            </Button>
+          </SheetTrigger>
+        </Tooltip>
+        <SheetContent side="right" className="overflow-y-auto">
+          {open && (
+            <FolderSettingsContent
+              labelId={labelId}
+              onEditRule={(config) => {
+                setOpen(false);
+                setRuleEditor(config);
+              }}
+            />
+          )}
+        </SheetContent>
+      </Sheet>
+
+      {ruleEditor && (
+        <RuleDialog
+          ruleId={ruleEditor.ruleId}
+          initialRule={ruleEditor.initialRule}
+          isOpen
+          onClose={() => setRuleEditor(null)}
+          onSuccess={() => setRuleEditor(null)}
+          editMode
+        />
+      )}
+    </>
   );
 }
 
-function FolderSettingsContent({ labelId }: { labelId: string }) {
+function FolderSettingsContent({
+  labelId,
+  onEditRule,
+}: {
+  labelId: string;
+  onEditRule: (config: RuleEditorConfig) => void;
+}) {
   const { emailAccountId, provider } = useAccount();
   const { userLabels, isLoading, error, mutate } = useLabels();
   const {
@@ -130,6 +172,7 @@ function FolderSettingsContent({ labelId }: { labelId: string }) {
               key={`rule-${labelId}`}
               labelId={labelId}
               labelName={label.name}
+              onEditRule={onEditRule}
             />
           </div>
         </>
@@ -258,12 +301,14 @@ function VisibilitySetting({
 function FolderRuleSetting({
   labelId,
   labelName,
+  onEditRule,
 }: {
   labelId: string;
   labelName: string;
+  onEditRule: (config: RuleEditorConfig) => void;
 }) {
   const { data, isLoading, error, mutate } = useSWR<FolderRuleResponse>(
-    `/api/user/rules/label/${encodeURIComponent(labelId)}`,
+    `/api/user/rules/label/${encodeURIComponent(labelId)}?name=${encodeURIComponent(labelName)}`,
   );
 
   return (
@@ -275,41 +320,40 @@ function FolderRuleSetting({
           labelName={labelName}
           rule={data.rule}
           mutateRule={mutate}
+          onEditRule={onEditRule}
         />
       )}
     </LoadingContent>
   );
 }
 
+// Status + entry points only: all editing happens in the assistant's
+// RuleDialog so the drawer and the Assistant page are one and the same editor
 function FolderRuleForm({
   labelId,
   labelName,
   rule,
   mutateRule,
+  onEditRule,
 }: {
   labelId: string;
   labelName: string;
   rule: FolderRuleResponse["rule"];
   mutateRule: () => void;
+  onEditRule: (config: RuleEditorConfig) => void;
 }) {
   const { emailAccountId } = useAccount();
 
-  const [enabled, setEnabled] = useState(rule?.enabled ?? true);
-  const [instructions, setInstructions] = useState(rule?.instructions ?? "");
-  const [from, setFrom] = useState(rule?.from ?? "");
-  const [operator, setOperator] = useState<LogicalOperator>(
-    rule?.conditionalOperator ?? LogicalOperator.OR,
-  );
-
   const isOrgManaged = !!rule?.organizationRuleId;
 
-  const save = useAction(saveFolderRuleAction.bind(null, emailAccountId), {
+  const toggle = useAction(toggleRuleAction.bind(null, emailAccountId), {
     onSuccess: () => {
-      toastSuccess({ description: "Folder filing rule saved" });
+      toastSuccess({ description: "Automatic filing updated" });
       mutateRule();
     },
     onError: (error) => {
       toastError({ description: getActionErrorMessage(error.error) });
+      mutateRule();
     },
   });
 
@@ -318,12 +362,13 @@ function FolderRuleForm({
     {
       onSuccess: (result) => {
         if (!result.data) return;
-        setInstructions(result.data.instructions);
-        if (result.data.senderPatterns.length) {
-          setFrom(result.data.senderPatterns.join(", "));
-        }
-        toastSuccess({
-          description: "Draft generated from this folder — review and save",
+        onEditRule({
+          initialRule: buildInitialFolderRule({
+            labelId,
+            labelName,
+            instructions: result.data.instructions,
+            senders: result.data.senderPatterns,
+          }),
         });
       },
       onError: (error) => {
@@ -338,16 +383,29 @@ function FolderRuleForm({
         <div>
           <Label htmlFor="folder-rule-enabled">Automatic filing</Label>
           <p className="mt-1 text-sm text-muted-foreground">
-            File matching incoming emails into this folder. Uses the same rules
-            as the Assistant page.
+            {rule ? (
+              <>
+                Managed as the “{rule.name}” rule — the same rule you see on the
+                Assistant page.
+              </>
+            ) : (
+              <>
+                No filing rule exists for this folder yet. Create one here or
+                let the AI draft it from the folder's emails.
+              </>
+            )}
           </p>
         </div>
-        <Switch
-          id="folder-rule-enabled"
-          checked={enabled}
-          disabled={isOrgManaged}
-          onCheckedChange={setEnabled}
-        />
+        {rule && (
+          <Switch
+            id="folder-rule-enabled"
+            checked={rule.enabled}
+            disabled={isOrgManaged || toggle.isExecuting}
+            onCheckedChange={(checked) =>
+              toggle.execute({ ruleId: rule.id, enabled: checked })
+            }
+          />
+        )}
       </div>
 
       {isOrgManaged ? (
@@ -356,89 +414,85 @@ function FolderRuleForm({
           Assistant page.
         </p>
       ) : (
-        <>
-          <div>
-            <Label htmlFor="folder-rule-from">Senders</Label>
-            <Input
-              id="folder-rule-from"
-              className="mt-2"
-              placeholder="@company.com, billing@stripe.com"
-              value={from}
-              onChange={(event) => setFrom(event.target.value)}
-            />
-            <p className="mt-1 text-sm text-muted-foreground">
-              Emails from these addresses or domains. Separate with commas.
-            </p>
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between gap-2">
-              <Label htmlFor="folder-rule-instructions">
-                Instructions for the AI
-              </Label>
-              <Button
-                variant="outline"
-                size="xs"
-                loading={generate.isExecuting}
-                onClick={() => generate.execute({ labelId, labelName })}
-              >
-                <SparklesIcon className="mr-1.5 size-3.5" />
-                Generate from folder
-              </Button>
-            </div>
-            <Textarea
-              id="folder-rule-instructions"
-              className="mt-2"
-              rows={4}
-              placeholder={`Which emails belong in "${labelName}"?`}
-              value={instructions}
-              onChange={(event) => setInstructions(event.target.value)}
-            />
-            <p className="mt-1 text-sm text-muted-foreground">
-              Generate learns from the emails already in this folder; you can
-              edit before saving.
-            </p>
-          </div>
-
-          {!!instructions.trim() && !!from.trim() && (
-            <div className="flex items-center justify-between gap-4">
-              <Label htmlFor="folder-rule-operator">Match</Label>
-              <select
-                id="folder-rule-operator"
-                className="rounded-md border border-border bg-background px-2 py-1.5 text-sm"
-                value={operator}
-                onChange={(event) =>
-                  setOperator(event.target.value as LogicalOperator)
-                }
-              >
-                <option value={LogicalOperator.OR}>
-                  Either senders or instructions
-                </option>
-                <option value={LogicalOperator.AND}>
-                  Both senders and instructions
-                </option>
-              </select>
-            </div>
-          )}
-
+        <div className="flex flex-wrap gap-2">
           <Button
-            loading={save.isExecuting}
-            disabled={!instructions.trim() && !from.trim()}
+            variant="outline"
+            size="sm"
             onClick={() =>
-              save.execute({
-                labelId,
-                labelName,
-                enabled,
-                instructions: instructions.trim() || null,
-                from: from.trim() || null,
-                conditionalOperator: operator,
-              })
+              onEditRule(
+                rule
+                  ? { ruleId: rule.id }
+                  : {
+                      initialRule: buildInitialFolderRule({
+                        labelId,
+                        labelName,
+                      }),
+                    },
+              )
             }
           >
-            Save
+            {rule ? (
+              <>
+                <PencilIcon className="mr-1.5 size-3.5" />
+                Edit rule
+              </>
+            ) : (
+              <>
+                <PlusIcon className="mr-1.5 size-3.5" />
+                Create rule
+              </>
+            )}
           </Button>
-        </>
+          {!rule && (
+            <Button
+              variant="outline"
+              size="sm"
+              loading={generate.isExecuting}
+              onClick={() => generate.execute({ labelId, labelName })}
+            >
+              <SparklesIcon className="mr-1.5 size-3.5" />
+              Generate from folder
+            </Button>
+          )}
+        </div>
       )}
     </div>
   );
+}
+
+function buildInitialFolderRule({
+  labelId,
+  labelName,
+  instructions,
+  senders,
+}: {
+  labelId: string;
+  labelName: string;
+  instructions?: string;
+  senders?: string[];
+}): Partial<CreateRuleBody> {
+  const conditions: CreateRuleBody["conditions"] = [];
+  if (instructions) {
+    conditions.push({ type: ConditionType.AI, instructions });
+  }
+  if (senders?.length) {
+    conditions.push({ type: ConditionType.STATIC, from: senders.join(", ") });
+  }
+  if (!conditions.length) {
+    conditions.push({ type: ConditionType.AI });
+  }
+
+  return {
+    name: `Label: ${labelName}`,
+    conditions,
+    conditionalOperator:
+      conditions.length > 1 ? LogicalOperator.OR : LogicalOperator.AND,
+    actions: [
+      {
+        type: ActionType.LABEL,
+        labelId: { value: labelId, name: labelName },
+      },
+    ],
+    runOnThreads: false,
+  };
 }
