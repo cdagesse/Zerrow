@@ -43,10 +43,13 @@ export function ContactsList() {
   const [showSync, setShowSync] = useState(false);
 
   // Tabs sync selection to the URL, so view and sort live there too;
-  // the sidebar's GROUPS panel drives ?group= and ?label=
+  // the sidebar's GROUPS panel drives ?group= and ?label=. The
+  // company-grouped list is the main view; a group selection shows people.
   const searchParams = useSearchParams();
   const view =
-    searchParams.get("view") === "companies" ? "companies" : "people";
+    searchParams.get("view") === "people" || searchParams.get("group")
+      ? "people"
+      : "companies";
   const sort = searchParams.get("sort") === "frequent" ? "frequent" : "recent";
   const groupKey = searchParams.get("group");
   const labelFilter = searchParams.get("label");
@@ -83,24 +86,41 @@ export function ContactsList() {
 
   const isWide = useIsWideScreen();
 
+  const companyCount = groups.filter(
+    (group) => group.key !== "personal" && group.key !== "other",
+  ).length;
+
   return (
     <div>
-      <div className="flex flex-wrap items-center gap-2">
-        <SearchBar onSearch={setSearch} className="w-full sm:w-64" />
-        <Tabs defaultValue="people" searchParam="view">
-          <TabsList>
-            <TabsTrigger value="people">People</TabsTrigger>
-            <TabsTrigger value="companies">Companies</TabsTrigger>
-          </TabsList>
-        </Tabs>
-        {view === "people" && (
-          <Tabs defaultValue="recent" searchParam="sort">
-            <TabsList>
-              <TabsTrigger value="recent">Recent</TabsTrigger>
-              <TabsTrigger value="frequent">Most emails</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        )}
+      <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+        <div>
+          <h1 className="font-display text-3xl leading-8 tracking-tight lg:text-4xl">
+            Contacts
+          </h1>
+          <p className="mt-1 text-sm text-muted-foreground">
+            {data ? (
+              activeGroupName ? (
+                <>
+                  Showing{" "}
+                  <span className="text-foreground">{activeGroupName}</span> ·{" "}
+                  {filteredContacts.length}{" "}
+                  {filteredContacts.length === 1 ? "person" : "people"}
+                </>
+              ) : (
+                <>
+                  {data.contacts.length} people · {companyCount} companies
+                </>
+              )
+            ) : (
+              "Everyone you email, built automatically from your mail history."
+            )}
+          </p>
+        </div>
+        <SearchBar
+          onSearch={setSearch}
+          placeholder="Search people, companies, titles..."
+          className="w-full min-w-0 flex-1 sm:w-auto sm:max-w-md"
+        />
         <div className="ml-auto flex items-center gap-2">
           <Button variant="outline" size="sm" onClick={() => setShowSync(true)}>
             <RefreshCwIcon className="mr-1.5 size-3.5" />
@@ -113,26 +133,24 @@ export function ContactsList() {
         </div>
       </div>
 
-      {data && (
-        <p className="mt-2 text-sm text-muted-foreground">
-          {activeGroupName ? (
-            <>
-              Showing <span className="text-foreground">{activeGroupName}</span>{" "}
-              · {filteredContacts.length}{" "}
-              {filteredContacts.length === 1 ? "person" : "people"}
-            </>
-          ) : (
-            <>
-              {data.contacts.length} people ·{" "}
-              {
-                groups.filter(
-                  (group) => group.key !== "personal" && group.key !== "other",
-                ).length
-              }{" "}
-              companies
-            </>
+      {/* A sidebar group selection speaks for itself; tabs would contradict it */}
+      {!groupKey && (
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Tabs defaultValue="companies" searchParam="view">
+            <TabsList>
+              <TabsTrigger value="companies">Companies</TabsTrigger>
+              <TabsTrigger value="people">People</TabsTrigger>
+            </TabsList>
+          </Tabs>
+          {view === "people" && (
+            <Tabs defaultValue="recent" searchParam="sort">
+              <TabsList>
+                <TabsTrigger value="recent">Recent</TabsTrigger>
+                <TabsTrigger value="frequent">Most emails</TabsTrigger>
+              </TabsList>
+            </Tabs>
           )}
-        </p>
+        </div>
       )}
 
       <div className="mt-4 flex items-start gap-6">

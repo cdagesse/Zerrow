@@ -106,6 +106,17 @@ export function ContactDetails({
         {contact.stale && <Badge color="yellow">Stale</Badge>}
       </div>
 
+      <div className="rounded-lg border border-border p-4">
+        <h3 className="flex items-center gap-1.5 text-[11px] font-medium uppercase tracking-[0.15em] text-muted-foreground/70">
+          <SparklesIcon className="size-3 text-primary" />
+          Relationship summary
+        </h3>
+        <p className="mt-2 whitespace-pre-wrap text-sm text-muted-foreground">
+          {contact.aiSummary ??
+            "No summary yet — use “Suggest from emails” below and the AI will write one from your email history."}
+        </p>
+      </div>
+
       <Button asChild variant="outline" size="sm">
         <Link
           href={prefixPath(
@@ -123,15 +134,6 @@ export function ContactDetails({
         companyName={company?.name ?? ""}
         mutateContacts={mutateContacts}
       />
-
-      {contact.aiSummary && (
-        <div>
-          <h3 className="mb-2 text-sm font-medium">AI summary</h3>
-          <p className="whitespace-pre-wrap text-sm text-muted-foreground">
-            {contact.aiSummary}
-          </p>
-        </div>
-      )}
 
       <RecentEmails email={contact.email} />
     </div>
