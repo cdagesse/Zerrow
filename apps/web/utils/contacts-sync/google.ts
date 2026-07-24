@@ -130,6 +130,25 @@ export async function pushContactToGoogle({
   }
 }
 
+// Deletes the linked Google person. Two-way sync: without this a local
+// delete would resurrect on the next pull.
+export async function deleteGoogleContact({
+  emailAccountId,
+  resourceName,
+  logger,
+}: {
+  emailAccountId: string;
+  resourceName: string;
+  logger: Logger;
+}): Promise<void> {
+  const client = await getPeopleClient({ emailAccountId, logger });
+  try {
+    await client.people.deleteContact({ resourceName });
+  } catch (error) {
+    throw translateGoogleError(error);
+  }
+}
+
 async function pullWithToken({
   client,
   emailAccountId,

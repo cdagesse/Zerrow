@@ -22,8 +22,11 @@ export const enrichContactBody = z.object({
 });
 export type EnrichContactBody = z.infer<typeof enrichContactBody>;
 
+// Looser than .email() on purpose: rows created by CardDAV/Google sync can
+// hold addresses that fail the strict regex, and delete is an exact-match
+// lookup scoped to the account — format doesn't matter
 export const deleteContactBody = z.object({
-  email: z.string().email(),
+  email: z.string().trim().min(1).max(320),
 });
 export type DeleteContactBody = z.infer<typeof deleteContactBody>;
 

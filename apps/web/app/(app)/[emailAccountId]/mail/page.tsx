@@ -5,6 +5,7 @@ import useSWRInfinite from "swr/infinite";
 import { useSWRConfig } from "swr";
 import { useSetAtom } from "jotai";
 import { SearchIcon, XIcon } from "lucide-react";
+import { PinnedPage } from "@/components/PinnedPage";
 import { List } from "@/components/email-list/EmailList";
 import { EmailListSkeleton } from "@/components/email-list/EmailListSkeleton";
 import { LoadingContent } from "@/components/LoadingContent";
@@ -143,12 +144,7 @@ export default function Mail(props: {
   }, [setSize]);
 
   return (
-    // Pin the mail view to the visible screen with internal list scrolling.
-    // On mobile use fixed positioning (tracks the real visual viewport even
-    // under iOS Safari page zoom, where svh/vh units over-report height) and
-    // a bottom offset that clears the fixed app tray (3.5rem + safe area);
-    // on desktop a viewport-unit height is reliable and respects the sidebar.
-    <div className="flex flex-col overflow-hidden max-md:fixed max-md:inset-x-0 max-md:top-9 max-md:bottom-[calc(3.5rem+env(safe-area-inset-bottom))] md:h-[calc(100svh-2.25rem)]">
+    <PinnedPage>
       <PermissionsCheck />
       <div className="relative border-b border-border px-4 py-1.5">
         <SearchIcon className="pointer-events-none absolute left-6 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -188,6 +184,6 @@ export default function Mail(props: {
           />
         )}
       </LoadingContent>
-    </div>
+    </PinnedPage>
   );
 }

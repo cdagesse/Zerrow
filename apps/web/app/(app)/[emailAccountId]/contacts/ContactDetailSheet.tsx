@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useAction } from "next-safe-action/hooks";
 import { formatDistanceToNow } from "date-fns";
@@ -71,10 +71,23 @@ export function ContactDetails({
   contact: ContactListItem;
   companies: CompanySummary[];
   mutateContacts: () => void;
-  onDeleted: () => void;
+  // The mobile sheet closes on delete; the wide pane keeps showing the
+  // (now unsaved) contact and omits this
+  onDeleted?: () => void;
 }) {
   const { emailAccountId } = useAccount();
   const company = resolveContactCompany(contact, companies);
+
+  // Remount the edit form only when the saved row disappears (deleted here
+  // or by a synced client) so cleared fields don't linger. Keying on isSaved
+  // itself would also fire when enrichment saves a summary (unsaved → saved)
+  // and wipe the suggestions panel mid-flow.
+  const [formEpoch, setFormEpoch] = useState(0);
+  const wasSaved = useRef(contact.isSaved);
+  useEffect(() => {
+    if (wasSaved.current && !contact.isSaved) setFormEpoch((n) => n + 1);
+    wasSaved.current = contact.isSaved;
+  }, [contact.isSaved]);
 
   const deleteContact = useAction(
     deleteContactAction.bind(null, emailAccountId),
@@ -82,7 +95,7 @@ export function ContactDetails({
       onSuccess: () => {
         toastSuccess({ description: "Contact deleted" });
         mutateContacts();
-        onDeleted();
+        onDeleted?.();
       },
       onError: (error) => {
         toastError({ description: getActionErrorMessage(error.error) });
@@ -154,7 +167,7 @@ export function ContactDetails({
             loading={deleteContact.isExecuting}
             onClick={() => {
               const yes = confirm(
-                "Delete this contact's saved details? They stay in the list while you have email history together.",
+                "Delete this contact's saved details (and their Google Contacts entry when sync is on)? They'll still appear in the list while you have email history together.",
               );
               if (yes) deleteContact.execute({ email: contact.email });
             }}
@@ -165,10 +178,8 @@ export function ContactDetails({
         )}
       </div>
 
-      {/* Deleting clears saved fields server-side; remount so the form
-          doesn't keep showing them (defaultValues only apply on mount) */}
       <ContactEditForm
-        key={String(contact.isSaved)}
+        key={formEpoch}
         contact={contact}
         companyName={company?.name ?? ""}
         mutateContacts={mutateContacts}

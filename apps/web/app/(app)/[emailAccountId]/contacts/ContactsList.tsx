@@ -69,14 +69,36 @@ export function ContactsList() {
     [data?.contacts, companies],
   );
 
+  // Scope contacts to the sidebar selection (a group or a label) so the
+  // people view and the detail-pane fallback both respect it
   const filteredContacts = useMemo(() => {
-    if (!groupKey) return data?.contacts ?? [];
-    return groups.find((group) => group.key === groupKey)?.contacts ?? [];
-  }, [data?.contacts, groups, groupKey]);
+    if (groupKey) {
+      return groups.find((group) => group.key === groupKey)?.contacts ?? [];
+    }
+    if (labelFilter) {
+      return groups
+        .filter(
+          (group) =>
+            group.company?.label?.id === labelFilter ||
+            group.company?.label?.parent?.id === labelFilter,
+        )
+        .flatMap((group) => group.contacts);
+    }
+    return data?.contacts ?? [];
+  }, [data?.contacts, groups, groupKey, labelFilter]);
+
+  const activeLabelName = labelFilter
+    ? groups
+        .flatMap((group) => {
+          const label = group.company?.label;
+          return label ? [label, ...(label.parent ? [label.parent] : [])] : [];
+        })
+        .find((label) => label.id === labelFilter)?.name
+    : null;
 
   const activeGroupName = groupKey
     ? groups.find((group) => group.key === groupKey)?.name
-    : null;
+    : activeLabelName;
 
   const selected = selectedEmail
     ? (data?.contacts.find((contact) => contact.email === selectedEmail) ??
@@ -211,24 +233,24 @@ export function ContactsList() {
           </LoadingContent>
         </div>
 
-        {/* Persistent detail pane on wide screens (the sheet covers the rest) */}
-        {isWide && (
-          <aside className="w-[400px] shrink-0 overflow-y-auto border-l border-border p-5">
-            {displayed ? (
-              <ContactDetails
-                key={displayed.email}
-                contact={displayed}
-                companies={companies}
-                mutateContacts={mutate}
-                onDeleted={() => setSelectedEmail(null)}
-              />
-            ) : (
-              <p className="py-12 text-center text-sm text-muted-foreground">
-                Select a contact to see their details.
-              </p>
-            )}
-          </aside>
-        )}
+        {/* Persistent detail pane on wide screens (the sheet covers the
+            rest). The container is CSS-gated so the list doesn't reflow
+            when the isWide hook resolves after hydration; the content is
+            JS-gated so narrow screens never mount it (or its fetches). */}
+        <aside className="hidden w-[400px] shrink-0 overflow-y-auto border-l border-border p-5 xl:block">
+          {isWide && displayed ? (
+            <ContactDetails
+              key={displayed.email}
+              contact={displayed}
+              companies={companies}
+              mutateContacts={mutate}
+            />
+          ) : (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              Select a contact to see their details.
+            </p>
+          )}
+        </aside>
       </div>
 
       <ContactDetailSheet
@@ -270,7 +292,9 @@ function PeopleTable({
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
-          <TableHead className="hidden xl:table-cell">Company</TableHead>
+          {/* 2xl, not xl: at exactly 1280px the 400px detail pane appears
+              and this column would force a nested horizontal scrollbar */}
+          <TableHead className="hidden 2xl:table-cell">Company</TableHead>
           <TableHead className="hidden sm:table-cell text-right">
             Received
           </TableHead>
@@ -330,7 +354,7 @@ function ContactRow({
           </div>
         </div>
       </TableCell>
-      <TableCell className="hidden xl:table-cell text-muted-foreground">
+      <TableCell className="hidden 2xl:table-cell text-muted-foreground">
         {groupName ?? "—"}
       </TableCell>
       <TableCell className="hidden sm:table-cell text-right tabular-nums">
