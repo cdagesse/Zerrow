@@ -6,8 +6,9 @@ import Link from "next/link";
 import useSWR from "swr";
 import type { LabelCountsResponse } from "@/app/api/labels/counts/route";
 import type { ContactsResponse } from "@/app/api/contacts/route";
+import type { ContactDomainsResponse } from "@/app/api/contacts/domains/route";
 import type { UserLabelsResponse } from "@/app/api/user/labels/route";
-import { groupContacts, pendingDomainGroups } from "@/utils/contacts";
+import { groupContacts, pendingDomainStats } from "@/utils/contacts";
 import { getLabelIcon } from "@/utils/label-icons";
 import { getEmailTerminology } from "@/utils/terminology";
 import {
@@ -63,6 +64,8 @@ type NavItem = {
   active?: boolean;
   beta?: boolean;
   new?: boolean;
+  // Nesting depth for tree-style panels (labels → companies)
+  indent?: 1 | 2;
 };
 
 const mailFolders = [
@@ -235,13 +238,17 @@ function AppRail({ path }: { path: string }) {
   );
 }
 
-// GROUPS panel for the Contacts app: all contacts, labels with their
-// companies nested beneath, then Personal. Shares the page's SWR cache.
+// GROUPS panel for the Contacts app: a tree of labels — each with its child
+// labels and member companies nested beneath — then Personal, Other, and
+// Suggested. Shares the page's SWR caches.
 function ContactsNav({ path }: { path: string }) {
   const { emailAccountId } = useAccount();
   const searchParams = useSearchParams();
   const { data } = useSWR<ContactsResponse>(
     "/api/contacts?sort=recent&limit=100",
+  );
+  const { data: domainsData } = useSWR<ContactDomainsResponse>(
+    "/api/contacts/domains",
   );
 
   const items: NavItem[] = useMemo(() => {
@@ -266,54 +273,81 @@ function ContactsNav({ path }: { path: string }) {
       companies: data.companies,
     });
 
-    // Labels first, each followed by its companies (indented via shortName)
-    const byLabel = new Map<string, typeof groups>();
+    // Label tree: parent labels, their child labels, and the companies
+    // under each — companies are dynamic subgroups of their label
+    type LabelNode = {
+      id: string;
+      name: string;
+      groups: typeof groups;
+      children: Map<string, LabelNode>;
+    };
+    const roots = new Map<string, LabelNode>();
+    const nodeFor = (
+      map: Map<string, LabelNode>,
+      id: string,
+      name: string,
+    ): LabelNode => {
+      const existing = map.get(id);
+      if (existing) return existing;
+      const node = { id, name, groups: [], children: new Map() };
+      map.set(id, node);
+      return node;
+    };
     for (const group of groups) {
       const label = group.company?.label;
       if (!label) continue;
-      byLabel.set(label.name, [...(byLabel.get(label.name) ?? []), group]);
-    }
-
-    for (const [labelName, labelGroups] of [...byLabel.entries()].sort(
-      ([a], [b]) => a.localeCompare(b),
-    )) {
-      const labelId = labelGroups[0].company?.label?.id ?? labelName;
-      base.push({
-        name: labelName,
-        href: `${contactsPath}?view=companies&label=${encodeURIComponent(labelId)}`,
-        icon: () => <FolderDot name={labelName} />,
-        count: labelGroups.reduce(
-          (total, group) => total + group.contacts.length,
-          0,
-        ),
-        active: currentLabel === labelId,
-      });
-      for (const group of labelGroups) {
-        base.push({
-          name: `— ${group.name}`,
-          shortName: group.name,
-          href: `${contactsPath}?group=${encodeURIComponent(group.key)}`,
-          icon: () => <FolderDot name={group.name} />,
-          count: group.contacts.length,
-          active: currentGroup === group.key,
-        });
+      if (label.parent) {
+        const root = nodeFor(roots, label.parent.id, label.parent.name);
+        nodeFor(root.children, label.id, label.name).groups.push(group);
+      } else {
+        nodeFor(roots, label.id, label.name).groups.push(group);
       }
     }
 
-    // Saved companies without a label — the biggest ones first, capped so
-    // the panel stays scannable. Auto domain groups live in Suggested.
-    const unlabeled = groups.filter(
-      (group) =>
-        group.company && !group.company.label && group.contacts.length > 0,
-    );
-    for (const group of unlabeled.slice(0, 12)) {
+    const countOf = (node: LabelNode): number =>
+      node.groups.reduce((total, group) => total + group.contacts.length, 0) +
+      [...node.children.values()].reduce(
+        (total, child) => total + countOf(child),
+        0,
+      );
+    const labelHref = (id: string) =>
+      `${contactsPath}?view=companies&label=${encodeURIComponent(id)}`;
+    const companyItem = (
+      group: (typeof groups)[number],
+      indent: 1 | 2,
+    ): NavItem => ({
+      name: group.name,
+      href: `${contactsPath}?group=${encodeURIComponent(group.key)}`,
+      icon: () => <FolderDot name={group.name} />,
+      count: group.contacts.length,
+      active: currentGroup === group.key,
+      indent,
+    });
+
+    for (const root of [...roots.values()].sort((a, b) =>
+      a.name.localeCompare(b.name),
+    )) {
       base.push({
-        name: group.name,
-        href: `${contactsPath}?group=${encodeURIComponent(group.key)}`,
-        icon: () => <FolderDot name={group.name} />,
-        count: group.contacts.length,
-        active: currentGroup === group.key,
+        name: root.name,
+        href: labelHref(root.id),
+        icon: () => <FolderDot name={root.name} />,
+        count: countOf(root),
+        active: currentLabel === root.id,
       });
+      for (const group of root.groups) base.push(companyItem(group, 1));
+      for (const child of [...root.children.values()].sort((a, b) =>
+        a.name.localeCompare(b.name),
+      )) {
+        base.push({
+          name: child.name,
+          href: labelHref(child.id),
+          icon: () => <FolderDot name={child.name} />,
+          count: countOf(child),
+          active: currentLabel === child.id,
+          indent: 1,
+        });
+        for (const group of child.groups) base.push(companyItem(group, 2));
+      }
     }
 
     const personal = groups.find((group) => group.key === "personal");
@@ -340,8 +374,9 @@ function ContactsNav({ path }: { path: string }) {
     }
 
     // Domains seen in email but not yet added as (or to) a company
-    const suggestedCount = pendingDomainGroups(
-      groups,
+    const suggestedCount = pendingDomainStats(
+      domainsData?.domains ?? [],
+      data.companies,
       data.ignoredDomains,
     ).length;
     if (suggestedCount > 0) {
@@ -355,7 +390,7 @@ function ContactsNav({ path }: { path: string }) {
     }
 
     return base;
-  }, [emailAccountId, data, path, searchParams]);
+  }, [emailAccountId, data, domainsData, path, searchParams]);
 
   return (
     <SidebarGroup>

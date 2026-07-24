@@ -39,7 +39,9 @@ export function CompaniesView({
   companies,
   labelFilter,
   activeEmail,
+  activeGroupKey,
   onSelectContact,
+  onSelectCompany,
   mutate,
 }: {
   contacts: ContactListItem[];
@@ -47,7 +49,10 @@ export function CompaniesView({
   // Restrict to companies under this label id (from the sidebar's GROUPS)
   labelFilter?: string | null;
   activeEmail: string | null;
+  activeGroupKey: string | null;
   onSelectContact: (contact: ContactListItem) => void;
+  // Clicking a company row shows its details in the pane
+  onSelectCompany: (key: string) => void;
   mutate: () => void;
 }) {
   const [editing, setEditing] = useState<CompanySummary | null>(null);
@@ -119,7 +124,11 @@ export function CompaniesView({
                 group={group}
                 companies={companies}
                 activeEmail={activeEmail}
+                active={group.key === activeGroupKey}
                 onSelectContact={onSelectContact}
+                onSelectCompany={
+                  group.company ? () => onSelectCompany(group.key) : undefined
+                }
                 onEdit={
                   group.company ? () => setEditing(group.company) : undefined
                 }
@@ -144,24 +153,50 @@ function CompanyRow({
   group,
   companies,
   activeEmail,
+  active,
   onSelectContact,
+  onSelectCompany,
   onEdit,
 }: {
   group: ContactGroup;
   companies: CompanySummary[];
   activeEmail: string | null;
+  active: boolean;
   onSelectContact: (contact: ContactListItem) => void;
+  onSelectCompany?: () => void;
   onEdit?: () => void;
 }) {
   const [open, setOpen] = useState(false);
 
   return (
     <div className="bg-background">
-      <div className="flex items-center gap-3 px-3 py-2">
+      <div
+        className={cn(
+          "flex items-center gap-3 px-3 py-2",
+          active && "bg-muted/50",
+        )}
+      >
+        {/* The chevron expands the member list; the row itself opens the
+            company's details (Personal has none, so it just expands) */}
+        <Button
+          variant="ghost"
+          size="iconSm"
+          className="-ml-1.5 size-6 shrink-0"
+          onClick={() => setOpen(!open)}
+        >
+          <span className="sr-only">
+            {open ? "Collapse people" : "Show people"}
+          </span>
+          {open ? (
+            <ChevronDownIcon className="size-4 text-muted-foreground" />
+          ) : (
+            <ChevronRightIcon className="size-4 text-muted-foreground" />
+          )}
+        </Button>
         <button
           type="button"
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
-          onClick={() => setOpen(!open)}
+          onClick={() => (onSelectCompany ? onSelectCompany() : setOpen(!open))}
         >
           {group.logoUrl ? (
             // biome-ignore lint/performance/noImgElement: external logos, not build assets
@@ -181,7 +216,7 @@ function CompanyRow({
               )}
             </div>
           )}
-          <span className="truncate text-sm font-semibold uppercase tracking-wide">
+          <span className="min-w-0 truncate text-sm font-semibold uppercase tracking-wide">
             {group.name}
           </span>
           <span className="hidden min-w-0 truncate text-sm text-muted-foreground sm:inline">
@@ -189,11 +224,6 @@ function CompanyRow({
             {group.domains.length > 0 && " · "}
             {group.contacts.length}
           </span>
-          {open ? (
-            <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
-          ) : (
-            <ChevronRightIcon className="size-4 shrink-0 text-muted-foreground" />
-          )}
         </button>
         {group.company?.label && (
           <Badge color="blue">{group.company.label.name}</Badge>

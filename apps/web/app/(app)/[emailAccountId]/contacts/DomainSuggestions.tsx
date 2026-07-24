@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import useSWR from "swr";
 import { useAction } from "next-safe-action/hooks";
 import {
   ChevronDownIcon,
@@ -8,12 +9,12 @@ import {
   EyeOffIcon,
   PlusIcon,
 } from "lucide-react";
+import type { ContactsResponse } from "@/app/api/contacts/route";
 import {
   type CompanySummary,
-  type ContactGroup,
   type ContactListItem,
-  groupContacts,
-  pendingDomainGroups,
+  type DomainStat,
+  domainLogoUrl,
 } from "@/utils/contacts";
 import {
   createCompanyAction,
@@ -24,6 +25,7 @@ import { getActionErrorMessage } from "@/utils/error";
 import { toastError, toastSuccess } from "@/components/Toast";
 import { cn } from "@/utils";
 import { Tooltip } from "@/components/Tooltip";
+import { LoadingContent } from "@/components/LoadingContent";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -43,52 +45,45 @@ import {
 } from "@/components/ui/select";
 import { ContactAvatar } from "./ContactsList";
 
-// Domains seen in your email that aren't part of any saved company yet.
-// Each can be added as a new company, added to an existing one, or ignored.
+// Domains from the FULL mail history that aren't part of any saved company,
+// sorted by email volume, automated senders excluded. Each can be added as
+// a new company, added to an existing one, or ignored.
 export function DomainSuggestions({
-  contacts,
-  companies,
+  stats,
   ignoredDomains,
+  companies,
   activeEmail,
   onSelectContact,
   mutate,
 }: {
-  contacts: ContactListItem[];
-  companies: CompanySummary[];
+  stats: DomainStat[];
   ignoredDomains: string[];
+  companies: CompanySummary[];
   activeEmail: string | null;
   onSelectContact: (contact: ContactListItem) => void;
   mutate: () => void;
 }) {
-  const [adding, setAdding] = useState<ContactGroup | null>(null);
+  const [adding, setAdding] = useState<string | null>(null);
   const [showIgnored, setShowIgnored] = useState(false);
-
-  const pending = useMemo(
-    () =>
-      pendingDomainGroups(
-        groupContacts({ contacts, companies }),
-        ignoredDomains,
-      ),
-    [contacts, companies, ignoredDomains],
-  );
 
   return (
     <div className="space-y-6">
       <div>
         <p className="mb-2 text-sm text-muted-foreground">
-          Domains from your email that aren't part of a company yet. Add the
-          ones you care about — everyone on that domain groups under it.
+          People-only domains from your entire mail history, busiest first —
+          no-reply and alert senders are filtered out. Add the ones you care
+          about; everyone on that domain groups under the company.
         </p>
-        {pending.length ? (
+        {stats.length ? (
           <div className="divide-y divide-border overflow-hidden rounded-lg border border-border">
-            {pending.map((group) => (
+            {stats.map((stat) => (
               <SuggestionRow
-                key={group.key}
-                group={group}
+                key={stat.domain}
+                stat={stat}
                 companies={companies}
                 activeEmail={activeEmail}
                 onSelectContact={onSelectContact}
-                onAdd={() => setAdding(group)}
+                onAdd={() => setAdding(stat.domain)}
                 mutate={mutate}
               />
             ))}
@@ -126,7 +121,7 @@ export function DomainSuggestions({
 
       {adding && (
         <AddCompanyDialog
-          group={adding}
+          domain={adding}
           companies={companies}
           onClose={() => setAdding(null)}
           mutate={mutate}
@@ -137,14 +132,14 @@ export function DomainSuggestions({
 }
 
 function SuggestionRow({
-  group,
+  stat,
   companies,
   activeEmail,
   onSelectContact,
   onAdd,
   mutate,
 }: {
-  group: ContactGroup;
+  stat: DomainStat;
   companies: CompanySummary[];
   activeEmail: string | null;
   onSelectContact: (contact: ContactListItem) => void;
@@ -153,7 +148,7 @@ function SuggestionRow({
 }) {
   const [open, setOpen] = useState(false);
   const { emailAccountId } = useAccount();
-  const domain = group.domains[0];
+  const { domain } = stat;
 
   const ignore = useAction(setDomainIgnoredAction.bind(null, emailAccountId), {
     onSuccess: () => {
@@ -173,22 +168,20 @@ function SuggestionRow({
           className="flex min-w-0 flex-1 items-center gap-3 text-left"
           onClick={() => setOpen(!open)}
         >
-          {group.logoUrl && (
-            // biome-ignore lint/performance/noImgElement: external favicons, not build assets
-            <img
-              src={group.logoUrl}
-              alt=""
-              width={32}
-              height={32}
-              className="size-7 shrink-0 rounded bg-muted object-cover p-0.5"
-            />
-          )}
-          <span className="truncate text-sm font-semibold uppercase tracking-wide">
+          {/* biome-ignore lint/performance/noImgElement: external favicons, not build assets */}
+          <img
+            src={domainLogoUrl(domain)}
+            alt=""
+            width={32}
+            height={32}
+            className="size-7 shrink-0 rounded bg-muted object-cover p-0.5"
+          />
+          <span className="min-w-0 truncate text-sm font-semibold uppercase tracking-wide">
             {domain}
           </span>
-          <span className="hidden min-w-0 truncate text-sm text-muted-foreground sm:inline">
-            {group.contacts.length}{" "}
-            {group.contacts.length === 1 ? "person" : "people"}
+          <span className="hidden shrink-0 text-sm text-muted-foreground sm:inline">
+            {stat.people} {stat.people === 1 ? "person" : "people"} ·{" "}
+            {stat.emails} {stat.emails === 1 ? "email" : "emails"}
           </span>
           {open ? (
             <ChevronDownIcon className="size-4 shrink-0 text-muted-foreground" />
@@ -214,8 +207,48 @@ function SuggestionRow({
       </div>
 
       {open && (
-        <div className="border-t border-border">
-          {group.contacts.map((contact) => (
+        <DomainMembers
+          domain={domain}
+          companies={companies}
+          activeEmail={activeEmail}
+          onSelectContact={onSelectContact}
+        />
+      )}
+    </div>
+  );
+}
+
+// Members load on expand — the suggestion list covers the full mail history,
+// so its people may be outside the main list's window
+function DomainMembers({
+  domain,
+  companies,
+  activeEmail,
+  onSelectContact,
+}: {
+  domain: string;
+  companies: CompanySummary[];
+  activeEmail: string | null;
+  onSelectContact: (contact: ContactListItem) => void;
+}) {
+  const { data, isLoading, error } = useSWR<ContactsResponse>(
+    `/api/contacts?search=${encodeURIComponent(domain)}&limit=100`,
+  );
+  const members = (data?.contacts ?? []).filter(
+    (contact) => contact.domain === domain,
+  );
+
+  return (
+    <div className="border-t border-border">
+      <LoadingContent
+        loading={isLoading && !data}
+        error={error}
+        loadingComponent={
+          <p className="px-3 py-2 text-sm text-muted-foreground">Loading…</p>
+        }
+      >
+        {members.length ? (
+          members.map((contact) => (
             <button
               key={contact.email}
               type="button"
@@ -231,13 +264,19 @@ function SuggestionRow({
                   {contact.name || contact.email}
                 </div>
                 <div className="truncate text-sm text-muted-foreground">
-                  {contact.email}
+                  {[contact.email, `${contact.receivedCount} received`]
+                    .filter(Boolean)
+                    .join(" · ")}
                 </div>
               </div>
             </button>
-          ))}
-        </div>
-      )}
+          ))
+        ) : (
+          <p className="px-3 py-2 text-sm text-muted-foreground">
+            No people found for this domain.
+          </p>
+        )}
+      </LoadingContent>
     </div>
   );
 }
@@ -278,18 +317,17 @@ function IgnoredRow({
 }
 
 function AddCompanyDialog({
-  group,
+  domain,
   companies,
   onClose,
   mutate,
 }: {
-  group: ContactGroup;
+  domain: string;
   companies: CompanySummary[];
   onClose: () => void;
   mutate: () => void;
 }) {
   const { emailAccountId } = useAccount();
-  const domain = group.domains[0];
   const [name, setName] = useState(suggestCompanyName(domain));
   const [existingName, setExistingName] = useState("");
   // Which button submitted, so only that one shows the spinner

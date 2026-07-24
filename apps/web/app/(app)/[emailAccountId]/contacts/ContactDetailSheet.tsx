@@ -8,7 +8,9 @@ import { formatDistanceToNow } from "date-fns";
 import { CheckIcon, MailIcon, SparklesIcon, Trash2Icon } from "lucide-react";
 import {
   type CompanySummary,
+  type ContactGroup,
   type ContactListItem,
+  type DomainStat,
   resolveContactCompany,
 } from "@/utils/contacts";
 import {
@@ -31,23 +33,44 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { ContactAvatar } from "./ContactsList";
+import { CompanyDetails } from "./CompanyDetails";
 
+// On narrow screens this sheet stands in for the persistent detail pane —
+// showing either a contact or a company
 export function ContactDetailSheet({
   contact,
+  group,
   companies,
+  domainStats,
   onClose,
+  onSelectContact,
   mutateContacts,
 }: {
   contact: ContactListItem | null;
+  group: ContactGroup | null;
   companies: CompanySummary[];
+  domainStats: DomainStat[];
   onClose: () => void;
+  onSelectContact: (contact: ContactListItem) => void;
   mutateContacts: () => void;
 }) {
   return (
-    <Sheet open={!!contact} onOpenChange={(open) => !open && onClose()}>
+    <Sheet
+      open={!!contact || !!group}
+      onOpenChange={(open) => !open && onClose()}
+    >
       <SheetContent side="right" className="overflow-y-auto sm:max-w-xl">
-        <SheetTitle className="sr-only">Contact details</SheetTitle>
-        {contact && (
+        <SheetTitle className="sr-only">Details</SheetTitle>
+        {group ? (
+          <CompanyDetails
+            key={group.key}
+            group={group}
+            companies={companies}
+            domainStats={domainStats}
+            onSelectContact={onSelectContact}
+            mutateContacts={mutateContacts}
+          />
+        ) : contact ? (
           <ContactDetails
             key={contact.email}
             contact={contact}
@@ -55,7 +78,7 @@ export function ContactDetailSheet({
             mutateContacts={mutateContacts}
             onDeleted={onClose}
           />
-        )}
+        ) : null}
       </SheetContent>
     </Sheet>
   );

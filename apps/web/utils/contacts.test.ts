@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
   contactAvatarUrl,
   groupContacts,
+  isLikelyAutomatedSender,
   mergeContactActivity,
+  pendingDomainStats,
   resolveContactCompany,
   type CompanySummary,
   type ContactListItem,
@@ -231,5 +233,54 @@ describe("contactAvatarUrl", () => {
         [company({ logoUrl: "https://logo.example/corp.png" })],
       ),
     ).toBe("https://p.example/me.jpg");
+  });
+});
+
+describe("isLikelyAutomatedSender", () => {
+  it.each([
+    "noreply@vercel.com",
+    "no-reply@github.com",
+    "no.reply@shop.com",
+    "do-not-reply@bank.com",
+    "donotreply@insurer.com",
+    "invoice+statements@supplier.com",
+    "notifications@vercel.com",
+    "alerts@datadog.com",
+    "mailer-daemon@googlemail.com",
+    "billing@stripe.com",
+    "team@costalerts.amazonaws.com",
+    "info@mailer.linkedin.com",
+  ])("flags %s as automated", (email) => {
+    expect(isLikelyAutomatedSender(email)).toBe(true);
+  });
+
+  it.each([
+    "jane@example.com",
+    "leah@northstar.vc",
+    "chris@nucar.com",
+    "anna.newsletter-jones@agency.com",
+    "sales@toyota.co.uk",
+  ])("keeps %s as a real person", (email) => {
+    expect(isLikelyAutomatedSender(email)).toBe(false);
+  });
+});
+
+describe("pendingDomainStats", () => {
+  const stat = (domain: string, emails: number) => ({
+    domain,
+    people: 1,
+    emails,
+    received: emails,
+    sent: 0,
+    lastInteractionAt: null,
+  });
+
+  it("drops company-claimed and ignored domains, keeping order", () => {
+    const result = pendingDomainStats(
+      [stat("big.com", 90), stat("example.com", 50), stat("tiny.io", 2)],
+      [company()],
+      ["tiny.io"],
+    );
+    expect(result.map((s) => s.domain)).toEqual(["big.com"]);
   });
 });

@@ -5,6 +5,7 @@ import type { ComponentProps } from "react";
 import type { LucideIcon } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { usePostHog } from "posthog-js/react";
+import { cn } from "@/utils";
 import {
   SidebarMenu,
   SidebarMenuButton,
@@ -32,6 +33,8 @@ type NavItem = {
   active?: boolean;
   beta?: boolean;
   new?: boolean;
+  // Nesting depth for tree-style panels (labels → companies)
+  indent?: 1 | 2;
 };
 
 export function SideNavMenu({
@@ -58,7 +61,11 @@ export function SideNavMenu({
           <SidebarMenuButton
             asChild
             isActive={item.active || activeHref === item.href}
-            className="h-9"
+            className={cn(
+              "h-9",
+              item.indent === 1 && "pl-5",
+              item.indent === 2 && "pl-8",
+            )}
             tooltip={item.name}
             sidebarName="left-sidebar"
           >
@@ -83,9 +90,13 @@ export function SideNavMenu({
               }}
             >
               <item.icon />
-              <span>{item.shortName ?? item.name}</span>
+              {/* min-w-0 + truncate: long label names must not push the
+                  count out of the panel */}
+              <span className="min-w-0 truncate">
+                {item.shortName ?? item.name}
+              </span>
               {typeof item.count === "number" && item.count > 0 && (
-                <span className="ml-auto text-xs font-medium tabular-nums text-primary">
+                <span className="ml-auto shrink-0 text-xs font-medium tabular-nums text-primary">
                   {item.count > 999 ? "999+" : item.count}
                 </span>
               )}
