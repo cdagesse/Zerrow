@@ -8,18 +8,26 @@ const paramsSchema = z.object({ labelId: z.string().min(1) });
 
 export type FolderRuleResponse = Awaited<ReturnType<typeof getFolderRule>>;
 
-// The rule whose LABEL action files emails into this folder, if any
+// The rule whose LABEL action files emails into this folder, if any.
+// Older rules reference their label by name only, so match either.
 async function getFolderRule({
   emailAccountId,
   labelId,
+  labelName,
 }: {
   emailAccountId: string;
   labelId: string;
+  labelName?: string;
 }) {
   const rule = await prisma.rule.findFirst({
     where: {
       emailAccountId,
-      actions: { some: { labelId, type: ActionType.LABEL } },
+      actions: {
+        some: {
+          type: ActionType.LABEL,
+          OR: [{ labelId }, ...(labelName ? [{ label: labelName }] : [])],
+        },
+      },
     },
     select: {
       id: true,
@@ -43,10 +51,13 @@ export const GET = withEmailAccount(
   async (request, context) => {
     const emailAccountId = request.auth.emailAccountId;
     const params = paramsSchema.parse(await context.params);
+    const { searchParams } = new URL(request.url);
+    const labelName = searchParams.get("name") || undefined;
 
     const result = await getFolderRule({
       emailAccountId,
       labelId: decodeURIComponent(params.labelId),
+      labelName,
     });
 
     return NextResponse.json(result);

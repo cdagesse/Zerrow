@@ -263,7 +263,7 @@ function FolderRuleSetting({
   labelName: string;
 }) {
   const { data, isLoading, error, mutate } = useSWR<FolderRuleResponse>(
-    `/api/user/rules/label/${encodeURIComponent(labelId)}`,
+    `/api/user/rules/label/${encodeURIComponent(labelId)}?name=${encodeURIComponent(labelName)}`,
   );
 
   return (
@@ -338,8 +338,17 @@ function FolderRuleForm({
         <div>
           <Label htmlFor="folder-rule-enabled">Automatic filing</Label>
           <p className="mt-1 text-sm text-muted-foreground">
-            File matching incoming emails into this folder. Uses the same rules
-            as the Assistant page.
+            {rule ? (
+              <>
+                Managed as the “{rule.name}” rule on the Assistant page — edits
+                here and there change the same rule.
+              </>
+            ) : (
+              <>
+                No filing rule exists for this folder yet. Saving creates one,
+                which also appears on the Assistant page.
+              </>
+            )}
           </p>
         </div>
         <Switch

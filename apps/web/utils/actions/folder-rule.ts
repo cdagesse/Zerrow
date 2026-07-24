@@ -40,10 +40,18 @@ export const saveFolderRuleAction = actionClient
       const trimmedInstructions = instructions?.trim() || null;
       const trimmedFrom = from?.trim() || null;
 
+      // Older rules reference their label by name only (labelId is filled
+      // lazily), so match either — the Assistant page and this drawer must
+      // agree on which rule files into the folder
       const existing = await prisma.rule.findFirst({
         where: {
           emailAccountId,
-          actions: { some: { labelId, type: ActionType.LABEL } },
+          actions: {
+            some: {
+              type: ActionType.LABEL,
+              OR: [{ labelId }, { label: labelName }],
+            },
+          },
         },
         select: {
           id: true,

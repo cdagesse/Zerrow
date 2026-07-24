@@ -103,6 +103,21 @@ describe("saveFolderRuleAction", () => {
       conditionalOperator: LogicalOperator.AND,
     });
 
+    // Older rules reference the label by name only — the lookup must match
+    // either, so the drawer edits the same rule the Assistant page shows
+    expect(prisma.rule.findFirst).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: expect.objectContaining({
+          actions: {
+            some: {
+              type: ActionType.LABEL,
+              OR: [{ labelId: "Label_1" }, { label: "Billing" }],
+            },
+          },
+        }),
+      }),
+    );
+
     expect(createRuleWithResolvedActionsMock).not.toHaveBeenCalled();
     expect(prisma.rule.update).toHaveBeenCalledWith({
       where: { id: "rule-1", emailAccountId: "account-1" },
