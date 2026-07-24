@@ -385,16 +385,23 @@ async function resolveLockedCompanyId({
   companyName: string | null | undefined;
   contactEmail: string;
 }): Promise<string | null> {
+  // Blank always means "no explicit assignment" — domain grouping (or the
+  // personal flag) takes over, so plain adds at owned domains keep working
+  const name = companyName?.trim();
+  if (!name) return null;
+
   const domain = emailDomain(contactEmail);
 
   if (domain && !isPublicEmailDomain(domain)) {
     const owner = await prisma.company.findFirst({
       where: { emailAccountId, domains: { has: domain } },
       select: { id: true, name: true },
+      // Deterministic pick if two companies ever share a domain
+      orderBy: { createdAt: "asc" },
     });
 
     if (owner) {
-      if (companyName?.trim() === owner.name) return owner.id;
+      if (name.toLowerCase() === owner.name.toLowerCase()) return owner.id;
       throw new SafeError(
         `${owner.name} owns the ${domain} domain, so this contact's company is set automatically. Edit ${owner.name}'s domains to change that, or mark the contact as personal.`,
       );

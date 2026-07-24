@@ -142,6 +142,44 @@ describe("updateContactAction company lock", () => {
     expect(prisma.contact.upsert).not.toHaveBeenCalled();
   });
 
+  it("blank company at an owned domain saves fine (domain grouping takes over)", async () => {
+    prisma.company.findFirst.mockResolvedValue({
+      id: "co-1",
+      name: "Vercel",
+    } as any);
+
+    const result = await updateContactAction("account-1", {
+      email: "rina@vercel.com",
+      companyName: "",
+      isPersonal: true,
+    });
+
+    expect(result?.serverError).toBeUndefined();
+    expect(prisma.contact.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ companyId: null, isPersonal: true }),
+      }),
+    );
+  });
+
+  it("accepts a case variant of the owning company's name", async () => {
+    prisma.company.findFirst.mockResolvedValue({
+      id: "co-1",
+      name: "Vercel",
+    } as any);
+
+    await updateContactAction("account-1", {
+      email: "rina@vercel.com",
+      companyName: "vercel",
+    });
+
+    expect(prisma.contact.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ companyId: "co-1" }),
+      }),
+    );
+  });
+
   it("keeps the owning company when the same name is re-submitted", async () => {
     prisma.company.findFirst.mockResolvedValue({
       id: "co-1",
