@@ -80,12 +80,9 @@ export function SideNavMenu({
               <item.icon />
               <span>{item.shortName ?? item.name}</span>
               {typeof item.count === "number" && item.count > 0 && (
-                <Badge
-                  variant="secondary"
-                  className="ml-auto px-1.5 text-[10px] tabular-nums"
-                >
-                  {item.count > 99 ? "99+" : item.count}
-                </Badge>
+                <span className="ml-auto text-xs font-medium tabular-nums text-primary">
+                  {item.count > 999 ? "999+" : item.count}
+                </span>
               )}
               {item.new && (
                 <Badge variant="green" className="ml-auto text-[10px]">

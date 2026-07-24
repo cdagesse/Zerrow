@@ -31,6 +31,7 @@ import {
   markReadThreads,
 } from "@/store/archive-queue";
 import { useAccount } from "@/providers/EmailAccountProvider";
+import { internalDateToDate } from "@/utils/date";
 import { prefixPath } from "@/utils/path";
 import { useIsMobile } from "@/hooks/use-mobile";
 import {
@@ -38,6 +39,13 @@ import {
   untrashThreadAction,
 } from "@/utils/actions/mail";
 import { isGoogleProvider } from "@/utils/email/provider-types";
+
+const VIEW_TITLES: Record<string, string> = {
+  inbox: "Inbox",
+  draft: "Drafts",
+  sent: "Sent",
+  archive: "Archived",
+};
 
 export function List({
   emails,
@@ -106,7 +114,15 @@ export function List({
           />
         </div>
       )}
-      {type === "label" && labelId && <FolderHeader labelId={labelId} />}
+      {type === "label" && labelId ? (
+        <FolderHeader labelId={labelId} />
+      ) : (
+        <div className="flex items-center gap-2 border-b border-border px-4 py-2">
+          <h1 className="font-display text-2xl tracking-tight">
+            {VIEW_TITLES[type ?? "inbox"] ?? "Inbox"}
+          </h1>
+        </div>
+      )}
       {emails.length ? (
         <EmailList
           threads={filteredEmails}
@@ -313,17 +329,25 @@ export function EmailList({
 
   const listRef = useRef<HTMLDivElement>(null);
 
+  // Threads interleaved with date group headers ("Today", "Yesterday", …)
+  const rows = useMemo(() => buildDateGroupedRows(threads), [threads]);
+
   const virtualizer = useVirtualizer<HTMLDivElement, HTMLLIElement>({
-    count: threads.length,
+    count: rows.length,
     getScrollElement: () => listRef.current,
-    estimateSize: () => 76,
+    estimateSize: (index) => (rows[index].kind === "header" ? 33 : 76),
     overscan: 10,
-    getItemKey: (index) => threads[index].id,
+    getItemKey: (index) => {
+      const row = rows[index];
+      return row.kind === "header" ? row.key : row.thread.id;
+    },
   });
 
   // to scroll to a row when the side panel is opened
   function scrollToThread(threadId: string) {
-    const index = threads.findIndex((thread) => thread.id === threadId);
+    const index = rows.findIndex(
+      (row) => row.kind === "thread" && row.thread.id === threadId,
+    );
     if (index === -1) return;
 
     // let the panel open first
@@ -486,7 +510,29 @@ export function EmailList({
                   style={{ height: virtualizer.getTotalSize() }}
                 >
                   {virtualizer.getVirtualItems().map((virtualRow) => {
-                    const thread = threads[virtualRow.index];
+                    const row = rows[virtualRow.index];
+
+                    if (row.kind === "header") {
+                      return (
+                        <li
+                          key={virtualRow.key}
+                          ref={virtualizer.measureElement}
+                          data-index={virtualRow.index}
+                          style={{
+                            position: "absolute",
+                            top: 0,
+                            left: 0,
+                            width: "100%",
+                            transform: `translateY(${virtualRow.start}px)`,
+                          }}
+                          className="border-b border-border bg-background px-4 py-2 text-[11px] font-medium uppercase tracking-[0.15em] text-muted-foreground/70"
+                        >
+                          {row.label}
+                        </li>
+                      );
+                    }
+
+                    const thread = row.thread;
 
                     const onOpen = () => {
                       const alreadyOpen = !!openThreadId;
@@ -603,4 +649,52 @@ function ResizeGroup({
       </ResizablePanel>
     </ResizablePanelGroup>
   );
+}
+
+type ListRow =
+  | { kind: "header"; key: string; label: string }
+  | { kind: "thread"; thread: Thread };
+
+// Threads arrive newest-first; insert a header row whenever the date bucket
+// changes (Today, Yesterday, then calendar dates)
+function buildDateGroupedRows(threads: Thread[]): ListRow[] {
+  const rows: ListRow[] = [];
+  let currentLabel: string | null = null;
+
+  for (const thread of threads) {
+    const lastMessage = thread.messages?.at(-1);
+    const date = internalDateToDate(lastMessage?.internalDate);
+    const label = dateBucketLabel(date);
+
+    if (label !== currentLabel) {
+      currentLabel = label;
+      rows.push({ kind: "header", key: `header-${label}`, label });
+    }
+    rows.push({ kind: "thread", thread });
+  }
+
+  return rows;
+}
+
+function dateBucketLabel(date: Date | undefined): string {
+  if (!date) return "Earlier";
+
+  const now = new Date();
+  const startOfToday = new Date(
+    now.getFullYear(),
+    now.getMonth(),
+    now.getDate(),
+  );
+  const startOfYesterday = new Date(
+    startOfToday.getTime() - 24 * 60 * 60 * 1000,
+  );
+
+  if (date >= startOfToday) return "Today";
+  if (date >= startOfYesterday) return "Yesterday";
+
+  return date.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    ...(date.getFullYear() !== now.getFullYear() ? { year: "numeric" } : {}),
+  });
 }

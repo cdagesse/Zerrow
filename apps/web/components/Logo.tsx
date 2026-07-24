@@ -5,6 +5,21 @@ interface LogoProps {
   className?: string;
 }
 
+// Icon-only rocket mark for compact spots like the app rail
+export function LogoMark({ className }: LogoProps) {
+  return (
+    <svg viewBox="0 0 56 62" fill="none" className={className}>
+      <title>{BRAND_NAME}</title>
+      <path d="M28 0C22 12 15 28 14 44L14 50L28 58Z" fill="#F4501F" />
+      <path d="M28 0C34 12 41 28 42 44L42 50L28 58Z" fill="#D93B12" />
+      <path d="M28 32L17 54L28 47L39 54Z" fill="#52565E" />
+      <path d="M28 47L22 58L28 54L34 58Z" fill="#141518" />
+      <path d="M12 36L4 48L4 62L12 54Z" fill="#E8491D" />
+      <path d="M44 36L52 48L52 62L44 54Z" fill="#C13413" />
+    </svg>
+  );
+}
+
 export function Logo({ className }: LogoProps) {
   if (BRAND_LOGO_URL) {
     return (

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import useSWR from "swr";
@@ -20,7 +20,7 @@ import {
   ShieldIcon,
   UsersRoundIcon,
 } from "lucide-react";
-import { Logo } from "@/components/Logo";
+import { LogoMark } from "@/components/Logo";
 import { useComposeModal } from "@/providers/ComposeModalProvider";
 import {
   Sidebar,
@@ -114,12 +114,7 @@ function SideNavBody({ path }: { path: string }) {
 
   return (
     <>
-      <SidebarHeader className="gap-0 pb-0">
-        <div className="flex items-center rounded-md pl-2 pr-0.5 py-3 text-foreground">
-          <Link href="/mail">
-            <Logo className="h-3.5" />
-          </Link>
-        </div>
+      <SidebarHeader className="gap-0 pb-0 pt-3">
         <AccountSwitcher />
       </SidebarHeader>
 
@@ -144,9 +139,61 @@ function SideNavBody({ path }: { path: string }) {
       <PremiumCard isCollapsed={false} />
 
       <SidebarFooter className="pb-4">
+        <SyncedStatus />
         <NavUser />
       </SidebarFooter>
     </>
+  );
+}
+
+const FOLDER_DOT_COLORS = [
+  "bg-emerald-500",
+  "bg-pink-500",
+  "bg-violet-500",
+  "bg-green-500",
+  "bg-sky-500",
+  "bg-amber-500",
+  "bg-red-500",
+  "bg-cyan-500",
+];
+
+// Stable per-folder accent dot, hashed from the folder name
+function FolderDot({ name }: { name: string }) {
+  let hash = 0;
+  for (const char of name) hash = (hash * 31 + char.charCodeAt(0)) | 0;
+  const color = FOLDER_DOT_COLORS[Math.abs(hash) % FOLDER_DOT_COLORS.length];
+
+  return (
+    <span className="flex size-4 shrink-0 items-center justify-center">
+      <span className={cn("size-2 rounded-full", color)} />
+    </span>
+  );
+}
+
+// Small "synced" heartbeat like a desktop mail client — stamps the time of
+// the latest unread-counts refresh (shared SWR cache, no extra request)
+function SyncedStatus() {
+  const { data } = useSWR<LabelCountsResponse>("/api/labels/counts");
+  const [syncedAt, setSyncedAt] = useState<Date | null>(null);
+
+  useEffect(() => {
+    if (data) setSyncedAt(new Date());
+  }, [data]);
+
+  if (!syncedAt) return null;
+
+  return (
+    <div className="flex items-center gap-2 px-2 pb-1 text-[10px] font-medium uppercase tracking-[0.15em] text-muted-foreground/70">
+      <span className="size-1.5 rounded-full bg-green-500" />
+      Synced ·{" "}
+      {syncedAt.toLocaleTimeString("en-US", {
+        hour: "2-digit",
+        minute: "2-digit",
+        hour12: false,
+        timeZone: "UTC",
+      })}{" "}
+      UTC
+    </div>
   );
 }
 
@@ -157,6 +204,13 @@ function AppRail({ path }: { path: string }) {
 
   return (
     <div className="flex h-full w-12 shrink-0 flex-col items-center gap-1 border-r border-sidebar-border py-2">
+      <Link
+        href="/mail"
+        className="mb-2 flex size-9 items-center justify-center rounded-lg bg-primary/15"
+      >
+        <LogoMark className="h-6" />
+        <span className="sr-only">Zerrow home</span>
+      </Link>
       {APPS.map((app) => (
         <Tooltip key={app.id} content={app.name}>
           <Link
@@ -245,16 +299,22 @@ function MailNav({ path }: { path: string }) {
   const toLabelNavItem = (label: {
     id?: string | null;
     name?: string | null;
-  }) => ({
-    name: label.name ?? "",
-    // Nested Gmail labels ("Work/Invoices") read better as their last segment
-    shortName: (label.name ?? "").split("/").pop() || (label.name ?? ""),
-    icon: getLabelIcon(label.id ? iconByGmailLabelId[label.id] : undefined),
-    href: `${mailPath}?type=label&labelId=${encodeURIComponent(label.id ?? "")}`,
-    count: label.id ? counts?.[label.id] : undefined,
-    active:
-      isMailPage && currentType === "label" && currentLabelId === label.id,
-  });
+  }) => {
+    const customIcon = label.id ? iconByGmailLabelId[label.id] : undefined;
+    return {
+      name: label.name ?? "",
+      // Nested Gmail labels ("Work/Invoices") read better as their last segment
+      shortName: (label.name ?? "").split("/").pop() || (label.name ?? ""),
+      // Custom icons win; otherwise a per-folder colored dot
+      icon: customIcon
+        ? getLabelIcon(customIcon)
+        : () => <FolderDot name={label.name ?? ""} />,
+      href: `${mailPath}?type=label&labelId=${encodeURIComponent(label.id ?? "")}`,
+      count: label.id ? counts?.[label.id] : undefined,
+      active:
+        isMailPage && currentType === "label" && currentLabelId === label.id,
+    };
+  };
 
   const labelNavItems = visibleLabels.map(toLabelNavItem);
   const hiddenLabelNavItems = hiddenLabels.map(toLabelNavItem);
@@ -278,12 +338,15 @@ function MailNav({ path }: { path: string }) {
       </SidebarGroup>
 
       <SidebarGroup>
+        <SidebarGroupLabel className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground/70">
+          Views
+        </SidebarGroupLabel>
         <SideNavMenu items={folderItems} activeHref={path} />
       </SidebarGroup>
 
       <SidebarGroup>
-        <SidebarGroupLabel>
-          {terminology.label.pluralCapitalized}
+        <SidebarGroupLabel className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground/70">
+          Folders
         </SidebarGroupLabel>
         <LoadingContent loading={isLoading}>
           {visibleLabels.length > 0 ? (
