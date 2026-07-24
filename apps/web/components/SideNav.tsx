@@ -15,6 +15,7 @@ import {
   FileIcon,
   InboxIcon,
   type LucideIcon,
+  MailsIcon,
   PenIcon,
   SendIcon,
   SettingsIcon,
@@ -48,6 +49,8 @@ import { useAccount } from "@/providers/EmailAccountProvider";
 import { prefixPath } from "@/utils/path";
 import { NavUser } from "@/components/NavUser";
 import { PremiumCard } from "@/components/PremiumCard";
+import { Tooltip } from "@/components/Tooltip";
+import { cn } from "@/utils";
 
 type NavItem = {
   name: string;
@@ -109,15 +112,18 @@ export function SideNav({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </div>
         )}
         <AccountSwitcher />
+        <AppTray path={path} />
       </SidebarHeader>
 
       <SidebarContent>
         {state.includes("left-sidebar") ? <SetupProgressCard /> : null}
 
         <SidebarGroupContent>
-          <MailNav path={path} />
-
-          <AppsNav path={path} />
+          {getActiveAppId(path) === "contacts" ? (
+            <ContactsNav path={path} />
+          ) : (
+            <MailNav path={path} />
+          )}
 
           <SidebarGroup>
             <SideNavMenu items={bottomItems} activeHref={path} />
@@ -134,14 +140,72 @@ export function SideNav({ ...props }: React.ComponentProps<typeof Sidebar>) {
   );
 }
 
-// The suite's non-mail apps. Grows as Meetings and Tasks ship.
-function AppsNav({ path }: { path: string }) {
+// The suite's apps. Grows as Meetings and Tasks ship.
+const APPS = [
+  { id: "mail", name: "Mail", icon: MailsIcon, path: "/mail" },
+  { id: "contacts", name: "Contacts", icon: UsersRoundIcon, path: "/contacts" },
+] as const;
+
+function getActiveAppId(path: string): (typeof APPS)[number]["id"] | null {
+  if (path.includes("/contacts")) return "contacts";
+  if (path.includes("/mail") || path.includes("/compose")) return "mail";
+  return null;
+}
+
+function AppTray({ path }: { path: string }) {
+  const { emailAccountId } = useAccount();
+  const { state, closeMobileSidebar } = useSidebar();
+  const collapsed = !state.includes("left-sidebar");
+  const activeApp = getActiveAppId(path);
+
+  return (
+    <div
+      className={cn(
+        "mt-2 flex gap-1",
+        collapsed ? "flex-col items-center" : "flex-row",
+      )}
+    >
+      {APPS.map((app) => {
+        const link = (
+          <Link
+            key={app.id}
+            href={prefixPath(emailAccountId, app.path)}
+            onClick={() => closeMobileSidebar("left-sidebar")}
+            className={cn(
+              "flex flex-col items-center justify-center gap-1 rounded-md py-1.5 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+              collapsed ? "size-8" : "flex-1",
+              app.id === activeApp &&
+                "bg-sidebar-accent text-sidebar-accent-foreground",
+            )}
+          >
+            <app.icon className="size-4" />
+            {!collapsed && (
+              <span className="text-[10px] font-medium leading-none">
+                {app.name}
+              </span>
+            )}
+          </Link>
+        );
+
+        return collapsed ? (
+          <Tooltip key={app.id} content={app.name}>
+            {link}
+          </Tooltip>
+        ) : (
+          link
+        );
+      })}
+    </div>
+  );
+}
+
+function ContactsNav({ path }: { path: string }) {
   const { emailAccountId } = useAccount();
 
   const items: NavItem[] = useMemo(
     () => [
       {
-        name: "Contacts",
+        name: "All contacts",
         href: prefixPath(emailAccountId, "/contacts"),
         icon: UsersRoundIcon,
       },
@@ -151,7 +215,7 @@ function AppsNav({ path }: { path: string }) {
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Apps</SidebarGroupLabel>
+      <SidebarGroupLabel>Contacts</SidebarGroupLabel>
       <SideNavMenu items={items} activeHref={path} />
     </SidebarGroup>
   );
