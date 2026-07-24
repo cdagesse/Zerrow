@@ -213,6 +213,8 @@ model EmailAccount {
   apiKeys                ApiKey[]
   classificationFeedback ClassificationFeedback[]
   contacts               Contact[]
+  companies              Company[]
+  companyLabels          CompanyLabel[]
 
   @@index([userId])
   @@index([lastSummaryEmailAt])
@@ -925,15 +927,67 @@ model Contact {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  email   String
-  name    String?
-  company String?
-  notes   String?
+  email     String
+  name      String?
+  title     String?
+  phone     String?
+  notes     String?
+  aiSummary String?
+  photoUrl  String?
+  // Company logo is the default avatar; flip to use the personal photo
+  useCompanyLogo Boolean @default(true)
+  // Personal contacts group under "Personal" instead of their company
+  isPersonal     Boolean @default(false)
+
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
 
   emailAccountId String
   emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
 
   @@unique([emailAccountId, email])
+}
+
+// A company groups contacts by its email domains. Contacts with a matching
+// domain group automatically; explicit companyId assignment wins.
+model Company {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name    String
+  domains String[] @default([])
+  logoUrl String?
+
+  labelId String?
+  label   CompanyLabel? @relation(fields: [labelId], references: [id], onDelete: SetNull)
+
+  contacts Contact[]
+
+  emailAccountId String
+  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([emailAccountId, name])
+}
+
+// Labels group companies, and can nest (e.g. "Factory" > Toyota)
+model CompanyLabel {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  name String
+
+  parentId String?
+  parent   CompanyLabel?  @relation("CompanyLabelNesting", fields: [parentId], references: [id], onDelete: SetNull)
+  children CompanyLabel[] @relation("CompanyLabelNesting")
+
+  companies Company[]
+
+  emailAccountId String
+  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([emailAccountId, name])
 }
 
 model ResponseTime {

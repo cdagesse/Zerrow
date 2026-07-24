@@ -9,9 +9,12 @@ import {
   SidebarTrigger,
   useSidebar,
 } from "@/components/ui/sidebar";
+import Link from "next/link";
 import { SideNav } from "@/components/SideNav";
 import { SidebarRight } from "@/components/SidebarRight";
+import { useAccount } from "@/providers/EmailAccountProvider";
 import { cn } from "@/utils";
+import { APPS, getActiveAppId, getAppHref } from "@/utils/apps";
 
 const CrispWithNoSSR = dynamic(() => import("@/components/CrispChat"));
 
@@ -34,6 +37,8 @@ function ContentWrapper({ children }: { children: React.ReactNode }) {
       <SidebarInset
         className={cn(
           "overflow-hidden bg-background pt-9 max-w-full",
+          // Leave room for the mobile bottom app tray
+          "pb-14 md:pb-0",
           noTopPadding && "pt-0",
         )}
       >
@@ -77,7 +82,33 @@ export function SideNavWithTopNav({
       <SideNav name="left-sidebar" />
       <ContentWrapper>{children}</ContentWrapper>
       {!isAssistantRoute ? <SidebarRight name="chat-sidebar" /> : null}
+      <MobileAppTray />
     </SidebarProvider>
+  );
+}
+
+// Bottom app switcher on mobile; desktop uses the sidebar's icon rail
+function MobileAppTray() {
+  const pathname = usePathname();
+  const { emailAccountId } = useAccount();
+  const activeApp = getActiveAppId(pathname ?? "");
+
+  return (
+    <nav className="fixed inset-x-0 bottom-0 z-50 flex border-t border-border bg-sidebar pb-[env(safe-area-inset-bottom)] md:hidden">
+      {APPS.map((app) => (
+        <Link
+          key={app.id}
+          href={getAppHref(emailAccountId, app)}
+          className={cn(
+            "flex flex-1 flex-col items-center justify-center gap-1 py-2 text-[10px] font-medium text-sidebar-foreground/70",
+            app.id === activeApp && "text-sidebar-accent-foreground",
+          )}
+        >
+          <app.icon className="size-5" />
+          {app.name}
+        </Link>
+      ))}
+    </nav>
   );
 }
 
