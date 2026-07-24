@@ -1,3 +1,4 @@
+import type { NextRequest } from "next/server";
 import { withError } from "@/utils/middleware";
 import {
   authenticateCarddavRequest,
@@ -11,7 +12,7 @@ export const maxDuration = 60;
 // WebDAV verbs (PROPFIND/REPORT), so middleware tunnels those here as POST
 // with the real verb in x-webdav-method; GET/PUT/DELETE/OPTIONS arrive
 // natively.
-const handle = withError("carddav", async (request, context) => {
+const handle = withError("carddav", async (request) => {
   const method =
     request.method === "POST"
       ? (request.headers.get("x-webdav-method")?.toUpperCase() ?? "POST")
@@ -35,11 +36,13 @@ const handle = withError("carddav", async (request, context) => {
   );
   if (!auth) return unauthorizedResponse();
 
-  const params = (await context.params) as { segments?: string[] };
+  // Catch-all params type as string[] which withError's context doesn't
+  // model — the path itself is the source of truth anyway
+  const segments = request.nextUrl.pathname.split("/").filter(Boolean).slice(2); // drop "api", "carddav"
 
   const result = await handleCarddavRequest({
     method,
-    segments: params.segments ?? [],
+    segments,
     depth: request.headers.get("depth") ?? "0",
     body: await request.text(),
     emailAccountId: auth.emailAccountId,
@@ -48,11 +51,14 @@ const handle = withError("carddav", async (request, context) => {
   return toResponse(result);
 });
 
-export const GET = handle;
-export const POST = handle;
-export const PUT = handle;
-export const DELETE = handle;
-export const OPTIONS = handle;
+const routeHandler = (request: NextRequest) =>
+  handle(request, { params: Promise.resolve({}) });
+
+export const GET = routeHandler;
+export const POST = routeHandler;
+export const PUT = routeHandler;
+export const DELETE = routeHandler;
+export const OPTIONS = routeHandler;
 
 function toResponse(result: {
   status: number;

@@ -55,6 +55,7 @@ import { APPS, getActiveAppId, getAppHref } from "@/utils/apps";
 
 type NavItem = {
   name: string;
+  shortName?: string;
   href: string;
   icon: LucideIcon | (() => React.ReactNode);
   target?: "_blank";

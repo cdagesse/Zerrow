@@ -261,6 +261,16 @@ async function loadFullContacts(emailAccountId: string) {
 async function findByUid(emailAccountId: string, uid: string) {
   return prisma.contact.findFirst({
     where: { emailAccountId, OR: [{ carddavUid: uid }, { id: uid }] },
+    select: {
+      id: true,
+      carddavUid: true,
+      email: true,
+      name: true,
+      phone: true,
+      title: true,
+      updatedAt: true,
+      company: { select: { name: true } },
+    },
   });
 }
 
