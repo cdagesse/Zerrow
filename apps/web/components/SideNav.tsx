@@ -7,7 +7,7 @@ import useSWR from "swr";
 import type { LabelCountsResponse } from "@/app/api/labels/counts/route";
 import type { ContactsResponse } from "@/app/api/contacts/route";
 import type { UserLabelsResponse } from "@/app/api/user/labels/route";
-import { groupContacts } from "@/utils/contacts";
+import { groupContacts, pendingDomainGroups } from "@/utils/contacts";
 import { getLabelIcon } from "@/utils/label-icons";
 import { getEmailTerminology } from "@/utils/terminology";
 import {
@@ -340,10 +340,9 @@ function ContactsNav({ path }: { path: string }) {
     }
 
     // Domains seen in email but not yet added as (or to) a company
-    const ignored = new Set(data.ignoredDomains);
-    const suggestedCount = groups.filter(
-      (group) =>
-        group.key.startsWith("domain:") && !ignored.has(group.domains[0]),
+    const suggestedCount = pendingDomainGroups(
+      groups,
+      data.ignoredDomains,
     ).length;
     if (suggestedCount > 0) {
       base.push({

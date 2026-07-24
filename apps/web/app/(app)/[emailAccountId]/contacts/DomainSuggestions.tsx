@@ -13,6 +13,7 @@ import {
   type ContactGroup,
   type ContactListItem,
   groupContacts,
+  pendingDomainGroups,
 } from "@/utils/contacts";
 import {
   createCompanyAction,
@@ -62,18 +63,13 @@ export function DomainSuggestions({
   const [adding, setAdding] = useState<ContactGroup | null>(null);
   const [showIgnored, setShowIgnored] = useState(false);
 
-  const ignored = useMemo(() => new Set(ignoredDomains), [ignoredDomains]);
-
-  const domainGroups = useMemo(
+  const pending = useMemo(
     () =>
-      groupContacts({ contacts, companies }).filter((group) =>
-        group.key.startsWith("domain:"),
+      pendingDomainGroups(
+        groupContacts({ contacts, companies }),
+        ignoredDomains,
       ),
-    [contacts, companies],
-  );
-
-  const pending = domainGroups.filter(
-    (group) => !ignored.has(group.domains[0]),
+    [contacts, companies, ignoredDomains],
   );
 
   return (

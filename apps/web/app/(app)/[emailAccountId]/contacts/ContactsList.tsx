@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import useSWR from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import { formatDistanceToNow } from "date-fns";
 import { PlusIcon, RefreshCwIcon, StickyNoteIcon } from "lucide-react";
 import type { ContactsResponse } from "@/app/api/contacts/route";
@@ -11,6 +11,7 @@ import {
   type CompanySummary,
   type ContactListItem,
   groupContacts,
+  pendingDomainGroups,
   resolveContactCompany,
 } from "@/utils/contacts";
 import { cn } from "@/utils";
@@ -63,9 +64,21 @@ export function ContactsList() {
 
   const params = new URLSearchParams({ sort, limit: String(limit) });
   if (search) params.set("search", search);
-  const { data, isLoading, error, mutate } = useSWR<ContactsResponse>(
+  const { data, isLoading, error } = useSWR<ContactsResponse>(
     `/api/contacts?${params.toString()}`,
     { keepPreviousData: true },
+  );
+
+  // Mutations refresh every /api/contacts variant — the sidebar GROUPS
+  // panel reads its own fixed key, which would otherwise go stale whenever
+  // this page's key carries a search/sort/limit
+  const { mutate: globalMutate } = useSWRConfig();
+  const mutate = useCallback(
+    () =>
+      globalMutate(
+        (key) => typeof key === "string" && key.startsWith("/api/contacts"),
+      ),
+    [globalMutate],
   );
 
   const companies = data?.companies ?? [];
@@ -115,19 +128,29 @@ export function ContactsList() {
 
   const isWide = useIsWideScreen();
 
+  const pendingSuggestions = useMemo(
+    () => pendingDomainGroups(groups, data?.ignoredDomains ?? []),
+    [groups, data?.ignoredDomains],
+  );
+
   // The detail pane is always populated on wide screens: fall back to the
-  // first contact in the current view when nothing is explicitly selected
-  const displayed = selected ?? filteredContacts[0] ?? null;
+  // first contact actually visible in the current view when nothing is
+  // explicitly selected
+  const fallback =
+    view === "suggested"
+      ? (pendingSuggestions[0]?.contacts[0] ?? null)
+      : view === "companies" && !labelFilter
+        ? (groups.find(
+            (group) =>
+              (group.company || group.key === "personal") &&
+              group.contacts.length > 0,
+          )?.contacts[0] ?? null)
+        : (filteredContacts[0] ?? null);
+  const displayed = selected ?? fallback;
   const activeEmail = isWide ? (displayed?.email ?? null) : null;
 
   const companyCount = companies.length;
-  const suggestedCount = useMemo(() => {
-    const ignored = new Set(data?.ignoredDomains ?? []);
-    return groups.filter(
-      (group) =>
-        group.key.startsWith("domain:") && !ignored.has(group.domains[0]),
-    ).length;
-  }, [groups, data?.ignoredDomains]);
+  const suggestedCount = pendingSuggestions.length;
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
