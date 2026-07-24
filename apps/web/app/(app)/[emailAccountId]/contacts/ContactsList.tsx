@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/table";
 import { ContactDetails, ContactDetailSheet } from "./ContactDetailSheet";
 import { CompaniesView } from "./CompaniesView";
+import { DomainSuggestions } from "./DomainSuggestions";
 import { AddContactDialog } from "./AddContactDialog";
 import { SyncSettingsDialog } from "./SyncSettingsDialog";
 
@@ -44,12 +45,14 @@ export function ContactsList() {
   const [showSync, setShowSync] = useState(false);
 
   // Tabs sync selection to the URL, so view and sort live there too;
-  // the sidebar's GROUPS panel drives ?group= and ?label=. The
-  // company-grouped list is the main view; a group selection shows people.
+  // the sidebar's GROUPS panel drives ?group= and ?label=. The curated
+  // company list is the main view; a group selection shows people.
   const searchParams = useSearchParams();
-  const view =
-    searchParams.get("view") === "people" || searchParams.get("group")
-      ? "people"
+  const viewParam = searchParams.get("view");
+  const view = searchParams.get("group")
+    ? "people"
+    : viewParam === "people" || viewParam === "suggested"
+      ? viewParam
       : "companies";
   const sort = searchParams.get("sort") === "frequent" ? "frequent" : "recent";
   const groupKey = searchParams.get("group");
@@ -114,9 +117,14 @@ export function ContactsList() {
   const displayed = selected ?? filteredContacts[0] ?? null;
   const activeEmail = isWide ? (displayed?.email ?? null) : null;
 
-  const companyCount = groups.filter(
-    (group) => group.key !== "personal" && group.key !== "other",
-  ).length;
+  const companyCount = companies.length;
+  const suggestedCount = useMemo(() => {
+    const ignored = new Set(data?.ignoredDomains ?? []);
+    return groups.filter(
+      (group) =>
+        group.key.startsWith("domain:") && !ignored.has(group.domains[0]),
+    ).length;
+  }, [groups, data?.ignoredDomains]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
@@ -173,6 +181,9 @@ export function ContactsList() {
               <TabsList>
                 <TabsTrigger value="companies">Companies</TabsTrigger>
                 <TabsTrigger value="people">People</TabsTrigger>
+                <TabsTrigger value="suggested">
+                  Suggested{suggestedCount > 0 && ` (${suggestedCount})`}
+                </TabsTrigger>
               </TabsList>
             </Tabs>
             {view === "people" && (
@@ -198,6 +209,15 @@ export function ContactsList() {
                     contacts={data.contacts}
                     companies={companies}
                     labelFilter={labelFilter}
+                    activeEmail={activeEmail}
+                    onSelectContact={setSelected}
+                    mutate={mutate}
+                  />
+                ) : view === "suggested" ? (
+                  <DomainSuggestions
+                    contacts={data.contacts}
+                    companies={companies}
+                    ignoredDomains={data.ignoredDomains}
                     activeEmail={activeEmail}
                     onSelectContact={setSelected}
                     mutate={mutate}

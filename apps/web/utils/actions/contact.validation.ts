@@ -48,6 +48,12 @@ export const createCompanyBody = z.object({
 });
 export type CreateCompanyBody = z.infer<typeof createCompanyBody>;
 
+export const setDomainIgnoredBody = z.object({
+  domain: z.string().min(1).max(200),
+  ignored: z.boolean(),
+});
+export type SetDomainIgnoredBody = z.infer<typeof setDomainIgnoredBody>;
+
 export const updateCompanyBody = z.object({
   id: z.string().min(1),
   name: z.string().min(1).max(200).optional(),

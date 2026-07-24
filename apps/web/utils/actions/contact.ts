@@ -9,6 +9,7 @@ import {
   deleteContactBody,
   enrichContactBody,
   setCarddavAccessBody,
+  setDomainIgnoredBody,
   setGoogleContactsSyncBody,
   updateCompanyBody,
   updateContactBody,
@@ -301,6 +302,34 @@ export const createCompanyAction = actionClient
           });
 
       return { company };
+    },
+  );
+
+// Hides a domain from (or restores it to) the Suggested companies list
+export const setDomainIgnoredAction = actionClient
+  .metadata({ name: "setDomainIgnored" })
+  .inputSchema(setDomainIgnoredBody)
+  .action(
+    async ({ ctx: { emailAccountId }, parsedInput: { domain, ignored } }) => {
+      const [normalized] = normalizeDomains([domain]);
+      if (!normalized) throw new SafeError("Invalid domain");
+
+      const account = await prisma.emailAccount.findUnique({
+        where: { id: emailAccountId },
+        select: { ignoredContactDomains: true },
+      });
+      const current = account?.ignoredContactDomains ?? [];
+
+      const next = ignored
+        ? [...new Set([...current, normalized])]
+        : current.filter((existing) => existing !== normalized);
+
+      await prisma.emailAccount.update({
+        where: { id: emailAccountId },
+        data: { ignoredContactDomains: next },
+      });
+
+      return { domain: normalized, ignored };
     },
   );
 
