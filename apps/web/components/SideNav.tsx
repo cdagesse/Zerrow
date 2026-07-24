@@ -5,7 +5,9 @@ import { usePathname, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import useSWR from "swr";
 import type { LabelCountsResponse } from "@/app/api/labels/counts/route";
+import type { ContactsResponse } from "@/app/api/contacts/route";
 import type { UserLabelsResponse } from "@/app/api/user/labels/route";
+import { groupContacts } from "@/utils/contacts";
 import { getLabelIcon } from "@/utils/label-icons";
 import { getEmailTerminology } from "@/utils/terminology";
 import {
@@ -232,23 +234,90 @@ function AppRail({ path }: { path: string }) {
   );
 }
 
+// GROUPS panel for the Contacts app: all contacts, labels with their
+// companies nested beneath, then Personal. Shares the page's SWR cache.
 function ContactsNav({ path }: { path: string }) {
   const { emailAccountId } = useAccount();
+  const searchParams = useSearchParams();
+  const { data } = useSWR<ContactsResponse>(
+    "/api/contacts?sort=recent&limit=100",
+  );
 
-  const items: NavItem[] = useMemo(
-    () => [
+  const items: NavItem[] = useMemo(() => {
+    const contactsPath = prefixPath(emailAccountId, "/contacts");
+    const currentGroup = searchParams.get("group");
+    const currentLabel = searchParams.get("label");
+
+    const base: NavItem[] = [
       {
         name: "All contacts",
-        href: prefixPath(emailAccountId, "/contacts"),
+        href: contactsPath,
         icon: UsersRoundIcon,
+        count: data?.contacts.length,
+        active: path.includes("/contacts") && !currentGroup && !currentLabel,
       },
-    ],
-    [emailAccountId],
-  );
+    ];
+
+    if (!data) return base;
+
+    const groups = groupContacts({
+      contacts: data.contacts,
+      companies: data.companies,
+    });
+
+    // Labels first, each followed by its companies (indented via shortName)
+    const byLabel = new Map<string, typeof groups>();
+    for (const group of groups) {
+      const label = group.company?.label;
+      if (!label) continue;
+      byLabel.set(label.name, [...(byLabel.get(label.name) ?? []), group]);
+    }
+
+    for (const [labelName, labelGroups] of [...byLabel.entries()].sort(
+      ([a], [b]) => a.localeCompare(b),
+    )) {
+      const labelId = labelGroups[0].company?.label?.id ?? labelName;
+      base.push({
+        name: labelName,
+        href: `${contactsPath}?view=companies&label=${encodeURIComponent(labelId)}`,
+        icon: () => <FolderDot name={labelName} />,
+        count: labelGroups.reduce(
+          (total, group) => total + group.contacts.length,
+          0,
+        ),
+        active: currentLabel === labelId,
+      });
+      for (const group of labelGroups) {
+        base.push({
+          name: `— ${group.name}`,
+          shortName: group.name,
+          href: `${contactsPath}?group=${encodeURIComponent(group.key)}`,
+          icon: () => <FolderDot name={group.name} />,
+          count: group.contacts.length,
+          active: currentGroup === group.key,
+        });
+      }
+    }
+
+    const personal = groups.find((group) => group.key === "personal");
+    if (personal) {
+      base.push({
+        name: "Personal",
+        href: `${contactsPath}?group=personal`,
+        icon: () => <FolderDot name="Personal" />,
+        count: personal.contacts.length,
+        active: currentGroup === "personal",
+      });
+    }
+
+    return base;
+  }, [emailAccountId, data, path, searchParams]);
 
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>Contacts</SidebarGroupLabel>
+      <SidebarGroupLabel className="text-[11px] uppercase tracking-[0.15em] text-muted-foreground/70">
+        Groups
+      </SidebarGroupLabel>
       <SideNavMenu items={items} activeHref={path} />
     </SidebarGroup>
   );
