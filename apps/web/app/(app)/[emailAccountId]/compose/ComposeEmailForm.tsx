@@ -7,7 +7,7 @@ import {
   ComboboxOption,
   ComboboxOptions,
 } from "@headlessui/react";
-import { CheckCircleIcon, TrashIcon, XIcon } from "lucide-react";
+import { CheckCircleIcon, PaperclipIcon, TrashIcon, XIcon } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { type SubmitHandler, useForm } from "react-hook-form";
 import useSWR from "swr";
@@ -17,7 +17,7 @@ import { toastError, toastSuccess } from "@/components/Toast";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { ButtonLoader } from "@/components/Loading";
+import { ButtonLoader, Loading } from "@/components/Loading";
 import { env } from "@/env";
 import { extractNameFromEmail } from "@/utils/email";
 import { Tiptap, type TiptapHandle } from "@/components/editor/Tiptap";
@@ -27,6 +27,16 @@ import type { SendEmailBody } from "@/utils/gmail/mail";
 import { CommandShortcut } from "@/components/ui/command";
 import { useModifierKey } from "@/hooks/useModifierKey";
 import { useAccount } from "@/providers/EmailAccountProvider";
+import { useEmailAccountFull } from "@/hooks/useEmailAccountFull";
+
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024; // Gmail rejects much beyond this anyway
+
+type ComposeAttachment = {
+  filename: string;
+  contentType: string;
+  content: string; // base64
+  size: number;
+};
 
 export type ReplyingToEmail = {
   threadId?: string;
@@ -42,21 +52,45 @@ export type ReplyingToEmail = {
   date?: string; // The date of the original email
 };
 
-export const ComposeEmailForm = ({
-  replyingToEmail,
-  refetch,
-  onSuccess,
-  onDiscard,
-}: {
+type ComposeEmailFormProps = {
   replyingToEmail?: ReplyingToEmail;
   refetch?: () => void;
   onSuccess?: (messageId: string, threadId: string) => void;
   onDiscard?: () => void;
-}) => {
+};
+
+// Waits for the account (signature) before mounting the form for new
+// compositions, since the editor and form defaults are seeded once at mount.
+// AI-drafted replies already carry the signature inside draftHtml.
+export const ComposeEmailForm = (props: ComposeEmailFormProps) => {
+  const { data: emailAccountData, isLoading } = useEmailAccountFull();
+
+  if (!props.replyingToEmail && isLoading) return <Loading />;
+
+  const signature = props.replyingToEmail
+    ? ""
+    : emailAccountData?.signature?.trim() || "";
+
+  return <ComposeEmailFormInner {...props} signature={signature} />;
+};
+
+const ComposeEmailFormInner = ({
+  replyingToEmail,
+  refetch,
+  onSuccess,
+  onDiscard,
+  signature,
+}: ComposeEmailFormProps & { signature: string }) => {
   const { emailAccountId } = useAccount();
   const [showFullContent, setShowFullContent] = useState(false);
   const { symbol } = useModifierKey();
   const formRef = useRef<HTMLFormElement>(null);
+
+  const initialMessageHtml = replyingToEmail
+    ? replyingToEmail.draftHtml
+    : signature
+      ? `<br><br>${signature}`
+      : undefined;
 
   const {
     register,
@@ -71,9 +105,54 @@ export const ComposeEmailForm = ({
       to: replyingToEmail?.to,
       cc: replyingToEmail?.cc,
       bcc: replyingToEmail?.bcc,
-      messageHtml: replyingToEmail?.draftHtml,
+      messageHtml: initialMessageHtml,
     },
   });
+
+  const [attachments, setAttachments] = useState<ComposeAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const onFilesSelected = useCallback(
+    async (event: React.ChangeEvent<HTMLInputElement>) => {
+      const files = Array.from(event.target.files ?? []);
+      event.target.value = "";
+      if (!files.length) return;
+
+      try {
+        const newAttachments = await Promise.all(
+          files.map(async (file) => ({
+            filename: file.name,
+            contentType: file.type || "application/octet-stream",
+            content: await fileToBase64(file),
+            size: file.size,
+          })),
+        );
+
+        setAttachments((current) => {
+          const combined = [...current, ...newAttachments];
+          const totalBytes = combined.reduce(
+            (sum, attachment) => sum + attachment.size,
+            0,
+          );
+          if (totalBytes > MAX_ATTACHMENT_BYTES) {
+            toastError({
+              description: "Attachments can't exceed 10MB in total",
+            });
+            return current;
+          }
+          return combined;
+        });
+      } catch (error) {
+        console.error("Failed to read attachment:", error);
+        toastError({ description: "Failed to read the selected file" });
+      }
+    },
+    [],
+  );
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((current) => current.filter((_, i) => i !== index));
+  }, []);
 
   const [showCcBcc, setShowCcBcc] = useState(
     Boolean(replyingToEmail?.cc || replyingToEmail?.bcc),
@@ -87,6 +166,13 @@ export const ComposeEmailForm = ({
         messageHtml: showFullContent
           ? data.messageHtml || ""
           : `${data.messageHtml || ""}<br>${replyingToEmail?.quotedContentHtml || ""}`,
+        attachments: attachments.length
+          ? attachments.map(({ filename, contentType, content }) => ({
+              filename,
+              contentType,
+              content,
+            }))
+          : undefined,
       };
 
       try {
@@ -106,7 +192,14 @@ export const ComposeEmailForm = ({
 
       refetch?.();
     },
-    [refetch, onSuccess, showFullContent, replyingToEmail, emailAccountId],
+    [
+      refetch,
+      onSuccess,
+      showFullContent,
+      replyingToEmail,
+      emailAccountId,
+      attachments,
+    ],
   );
 
   useHotkeys(
@@ -362,7 +455,8 @@ export const ComposeEmailForm = ({
 
       <Tiptap
         ref={editorRef}
-        initialContent={replyingToEmail?.draftHtml}
+        initialContent={initialMessageHtml}
+        autofocus={replyingToEmail ? true : "start"}
         onChange={handleEditorChange}
         className="min-h-[200px]"
         onMoreClick={
@@ -372,12 +466,57 @@ export const ComposeEmailForm = ({
         }
       />
 
+      {attachments.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {attachments.map((attachment, index) => (
+            <Badge
+              key={`${attachment.filename}-${index}`}
+              variant="secondary"
+              className="max-w-60 gap-1 rounded-md"
+            >
+              <PaperclipIcon className="size-3 shrink-0" />
+              <span className="truncate">{attachment.filename}</span>
+              <span className="shrink-0 text-muted-foreground">
+                {formatBytes(attachment.size)}
+              </span>
+              <button
+                type="button"
+                aria-label={`Remove ${attachment.filename}`}
+                onClick={() => removeAttachment(index)}
+              >
+                <XIcon className="size-3" />
+              </button>
+            </Badge>
+          ))}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting && <ButtonLoader />}
-          Send
-          <CommandShortcut className="ml-2">{symbol}+Enter</CommandShortcut>
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button type="submit" disabled={isSubmitting}>
+            {isSubmitting && <ButtonLoader />}
+            Send
+            <CommandShortcut className="ml-2">{symbol}+Enter</CommandShortcut>
+          </Button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            className="hidden"
+            onChange={onFilesSelected}
+          />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            disabled={isSubmitting}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <PaperclipIcon className="h-4 w-4" />
+            <span className="sr-only">Attach files</span>
+          </Button>
+        </div>
 
         {onDiscard && (
           <Button
@@ -395,6 +534,29 @@ export const ComposeEmailForm = ({
     </form>
   );
 };
+
+function fileToBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result as string;
+      const base64 = dataUrl.split(",")[1];
+      if (base64 === undefined) {
+        reject(new Error("Could not read file"));
+        return;
+      }
+      resolve(base64);
+    };
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${Math.round(bytes / 1024)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 
 function getReplyToEmailPayload(
   replyingToEmail:

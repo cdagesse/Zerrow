@@ -123,7 +123,7 @@ export const generateFolderInstructionsAction = actionClient
 
       const threads = await emailProvider.getThreadsWithLabel({
         labelId,
-        maxResults: 20,
+        maxResults: 15,
       });
 
       const emails = threads
@@ -150,8 +150,14 @@ export const generateFolderInstructionsAction = actionClient
       } catch (error) {
         if (error instanceof SafeError) throw error;
         logger.error("Error generating folder instructions", { error });
+        // Surface the underlying cause: without it, config problems (model,
+        // key, quota) are indistinguishable from transient failures
+        const reason =
+          error instanceof Error
+            ? error.message.slice(0, 160)
+            : "unknown error";
         throw new SafeError(
-          "Could not generate instructions from this folder. Try again or write them manually.",
+          `Could not generate instructions from this folder: ${reason}`,
         );
       }
     },

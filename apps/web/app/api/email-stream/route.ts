@@ -2,7 +2,8 @@ import { RedisSubscriber } from "@/utils/redis/subscriber";
 import { withAuth } from "@/utils/middleware";
 import { NextResponse } from "next/server";
 import { getEmailAccount } from "@/utils/redis/account-validation";
-import { assertCleanerApiEnabled } from "@/utils/cleaner-feature";
+import { liveInboxChannel } from "@/utils/redis/live-inbox";
+import { env } from "@/env";
 
 export const maxDuration = 300;
 
@@ -10,7 +11,14 @@ export const maxDuration = 300;
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000;
 
 export const GET = withAuth("email-stream", async (request) => {
-  assertCleanerApiEnabled();
+  // Live updates need the RESP subscriber connection; clients fall back to
+  // polling when this isn't configured
+  if (!env.REDIS_URL) {
+    return NextResponse.json(
+      { error: "Live updates not configured" },
+      { status: 503 },
+    );
+  }
 
   const { userId } = request.auth;
 
@@ -38,11 +46,19 @@ export const GET = withAuth("email-stream", async (request) => {
   });
 
   const pattern = `thread:${emailAccountId}:*`;
+  const inboxChannel = liveInboxChannel(emailAccountId);
   const redisSubscriber = RedisSubscriber.createInstance();
 
   redisSubscriber.psubscribe(pattern, (err) => {
     if (err)
       request.logger.error("Error subscribing to threads", { error: err });
+  });
+
+  redisSubscriber.subscribe(inboxChannel, (err) => {
+    if (err)
+      request.logger.error("Error subscribing to inbox events", {
+        error: err,
+      });
   });
 
   // Set headers for SSE
@@ -79,16 +95,12 @@ export const GET = withAuth("email-stream", async (request) => {
         }, INACTIVITY_TIMEOUT);
       };
 
-      const handleMessage = (
-        matchedPattern: string,
-        _channel: string,
-        message: string,
-      ) => {
-        if (matchedPattern !== pattern || isControllerClosed) return;
+      const enqueueEvent = (event: string, message: string) => {
+        if (isControllerClosed) return;
 
         try {
           controller.enqueue(
-            encoder.encode(`event: thread\ndata: ${message}\n\n`),
+            encoder.encode(`event: ${event}\ndata: ${message}\n\n`),
           );
           resetInactivityTimer();
         } catch (error) {
@@ -98,12 +110,27 @@ export const GET = withAuth("email-stream", async (request) => {
         }
       };
 
+      const handleMessage = (
+        matchedPattern: string,
+        _channel: string,
+        message: string,
+      ) => {
+        if (matchedPattern !== pattern) return;
+        enqueueEvent("thread", message);
+      };
+
+      const handleInboxMessage = (channel: string, message: string) => {
+        if (channel !== inboxChannel) return;
+        enqueueEvent("inbox", message);
+      };
+
       const cleanup = () => {
         if (isCleanedUp) return;
 
         isCleanedUp = true;
         clearTimeout(inactivityTimer);
         redisSubscriber.off("pmessage", handleMessage);
+        redisSubscriber.off("message", handleInboxMessage);
         redisSubscriber.disconnect();
       };
 
@@ -111,6 +138,7 @@ export const GET = withAuth("email-stream", async (request) => {
       resetInactivityTimer();
 
       redisSubscriber.on("pmessage", handleMessage);
+      redisSubscriber.on("message", handleInboxMessage);
 
       request.signal.addEventListener("abort", () => {
         request.logger.info("Cleaning up Redis subscription", {

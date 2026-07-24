@@ -897,7 +897,16 @@ export class GmailProvider implements EmailProvider {
       contentType: string;
     }>;
   }) {
-    const result = await sendEmailWithHtml(this.client, body);
+    // Attachment content arrives base64-encoded; nodemailer treats string
+    // content as utf-8, so decode to a Buffer (same as the forward flow)
+    const result = await sendEmailWithHtml(this.client, {
+      ...body,
+      attachments: body.attachments?.map((attachment) => ({
+        filename: attachment.filename,
+        contentType: attachment.contentType,
+        content: Buffer.from(attachment.content, "base64"),
+      })),
+    });
     return {
       messageId: result.data.id || "",
       threadId: result.data.threadId || "",
@@ -1502,11 +1511,19 @@ export class GmailProvider implements EmailProvider {
         }
       }
 
+      // A free-text search with no explicit folder spans all mail — the
+      // default INBOX scope would hide archived/filed matches
+      const searchesAllMail = !!q && !type && !labelId && !labelIds?.length;
+
       const { threads: gmailThreads, nextPageToken } =
         await getThreadsWithNextPageToken({
           gmail: this.client,
           q: getQuery(),
-          labelIds: labelId ? [labelId] : getLabelIds(type) || [],
+          labelIds: labelId
+            ? [labelId]
+            : searchesAllMail
+              ? []
+              : getLabelIds(type) || [],
           maxResults: options.maxResults || 50,
           pageToken: options.pageToken || undefined,
           logger: this.logger,

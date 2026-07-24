@@ -15,7 +15,11 @@ vi.mock("@/utils/email/provider", () => ({
   createEmailProvider: createEmailProviderMock,
 }));
 
-import { updateLabelAction, updateLabelsAction } from "@/utils/actions/mail";
+import {
+  sendEmailAction,
+  updateLabelAction,
+  updateLabelsAction,
+} from "@/utils/actions/mail";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -153,6 +157,68 @@ describe("updateLabelAction", () => {
     expect(prisma.label.upsert).toHaveBeenCalledWith(
       expect.objectContaining({
         update: expect.objectContaining({ icon: undefined }),
+      }),
+    );
+  });
+});
+
+describe("sendEmailAction", () => {
+  it("rejects attachments over the 10MB total cap before touching the provider", async () => {
+    const sendEmailWithHtml = vi.fn();
+    createEmailProviderMock.mockResolvedValue({ sendEmailWithHtml });
+
+    // ~11MB decoded (base64 length * 0.75)
+    const oversized = "a".repeat(Math.ceil((11 * 1024 * 1024 * 4) / 3));
+
+    const result = await sendEmailAction("account-1", {
+      to: "recipient@example.com",
+      subject: "Subject",
+      messageHtml: "<p>hi</p>",
+      attachments: [
+        {
+          filename: "big.bin",
+          contentType: "application/octet-stream",
+          content: oversized,
+        },
+      ],
+    });
+
+    expect(result?.serverError).toBeTruthy();
+    expect(sendEmailWithHtml).not.toHaveBeenCalled();
+  });
+
+  it("passes attachments within the cap through to the provider", async () => {
+    const sendEmailWithHtml = vi
+      .fn()
+      .mockResolvedValue({ messageId: "m1", threadId: "t1" });
+    createEmailProviderMock.mockResolvedValue({ sendEmailWithHtml });
+
+    const result = await sendEmailAction("account-1", {
+      to: "recipient@example.com",
+      subject: "Subject",
+      messageHtml: "<p>hi</p>",
+      attachments: [
+        {
+          filename: "notes.txt",
+          contentType: "text/plain",
+          content: Buffer.from("hello").toString("base64"),
+        },
+      ],
+    });
+
+    expect(result?.data).toEqual({
+      success: true,
+      messageId: "m1",
+      threadId: "t1",
+    });
+    expect(sendEmailWithHtml).toHaveBeenCalledWith(
+      expect.objectContaining({
+        attachments: [
+          expect.objectContaining({
+            filename: "notes.txt",
+            contentType: "text/plain",
+          }),
+        ],
       }),
     );
   });
