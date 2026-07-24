@@ -35,7 +35,8 @@ const MAX_LIMIT = 500;
 export function ContactsList() {
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
-  const [selected, setSelected] = useState<ContactListItem | null>(null);
+  // Track selection by email so the sheet re-reads fresh data after mutations
+  const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
 
   // Tabs sync selection to the URL, so view and sort live there too
@@ -52,6 +53,12 @@ export function ContactsList() {
   );
 
   const companies = data?.companies ?? [];
+  const selected = selectedEmail
+    ? (data?.contacts.find((contact) => contact.email === selectedEmail) ??
+      null)
+    : null;
+  const setSelected = (contact: ContactListItem) =>
+    setSelectedEmail(contact.email);
 
   return (
     <div>
@@ -121,7 +128,7 @@ export function ContactsList() {
       <ContactDetailSheet
         contact={selected}
         companies={companies}
-        onClose={() => setSelected(null)}
+        onClose={() => setSelectedEmail(null)}
         mutateContacts={mutate}
       />
       <AddContactDialog

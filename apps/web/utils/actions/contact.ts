@@ -1,13 +1,18 @@
 "use server";
 
 import { actionClient } from "@/utils/actions/safe-action";
-import { SafeError } from "@/utils/error";
+import { describeError, SafeError } from "@/utils/error";
 import {
   createCompanyBody,
+  enrichContactBody,
   updateCompanyBody,
   updateContactBody,
 } from "@/utils/actions/contact.validation";
 import { isPublicEmailDomain } from "@/utils/email";
+import { createEmailProvider } from "@/utils/email/provider";
+import { getEmailAccountWithAiAndTokens } from "@/utils/user/get";
+import { getEmailForLLM } from "@/utils/get-email-from-message";
+import { aiEnrichContact } from "@/utils/ai/contacts/enrich-contact";
 import prisma from "@/utils/prisma";
 
 export const updateContactAction = actionClient
@@ -58,6 +63,92 @@ export const updateContactAction = actionClient
       });
 
       return { contact };
+    },
+  );
+
+// Reads the contact's recent emails and returns suggested details (name,
+// title, company, phones) for the user to review; only the AI relationship
+// summary is saved directly.
+export const enrichContactAction = actionClient
+  .metadata({ name: "enrichContact" })
+  .inputSchema(enrichContactBody)
+  .action(
+    async ({
+      ctx: { emailAccountId, provider, logger },
+      parsedInput: { email },
+    }) => {
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const emailAccount = await getEmailAccountWithAiAndTokens({
+        emailAccountId,
+      });
+      if (!emailAccount) throw new SafeError("Email account not found");
+
+      const emailProvider = await createEmailProvider({
+        emailAccountId,
+        provider,
+        logger,
+      });
+
+      const { messages } = await emailProvider.getMessagesFromSender({
+        senderEmail: normalizedEmail,
+        maxResults: 10,
+      });
+
+      if (!messages.length) {
+        throw new SafeError(
+          "No emails from this contact to learn from yet. Details can only be extracted from their emails.",
+        );
+      }
+
+      const contact = await prisma.contact.findUnique({
+        where: {
+          emailAccountId_email: { emailAccountId, email: normalizedEmail },
+        },
+        select: { name: true },
+      });
+
+      try {
+        const result = await aiEnrichContact({
+          emailAccount,
+          contactEmail: normalizedEmail,
+          contactName: contact?.name,
+          emails: messages.map((message) =>
+            getEmailForLLM(message, { removeForwarded: true, maxLength: 2000 }),
+          ),
+        });
+        if (!result) throw new SafeError("Could not analyze this contact");
+
+        // The summary is the AI's own output — save it; extracted details
+        // are suggestions the user applies explicitly
+        await prisma.contact.upsert({
+          where: {
+            emailAccountId_email: { emailAccountId, email: normalizedEmail },
+          },
+          update: { aiSummary: result.summary },
+          create: {
+            emailAccountId,
+            email: normalizedEmail,
+            aiSummary: result.summary,
+          },
+        });
+
+        return {
+          suggestions: {
+            name: result.name,
+            title: result.title,
+            company: result.company,
+            phones: result.phones,
+          },
+          summary: result.summary,
+        };
+      } catch (error) {
+        if (error instanceof SafeError) throw error;
+        logger.error("Error enriching contact", { error });
+        throw new SafeError(
+          `Could not analyze this contact's emails: ${describeError(error)}`,
+        );
+      }
     },
   );
 

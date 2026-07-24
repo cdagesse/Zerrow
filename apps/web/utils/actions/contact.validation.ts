@@ -17,6 +17,11 @@ export const updateContactBody = z.object({
 });
 export type UpdateContactBody = z.infer<typeof updateContactBody>;
 
+export const enrichContactBody = z.object({
+  email: z.string().email(),
+});
+export type EnrichContactBody = z.infer<typeof enrichContactBody>;
+
 export const createCompanyBody = z.object({
   name: z.string().min(1).max(200),
   domains: z.array(z.string().min(1).max(200)).max(50).optional(),

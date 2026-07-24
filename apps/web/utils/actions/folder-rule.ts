@@ -1,7 +1,7 @@
 "use server";
 
 import { actionClient } from "@/utils/actions/safe-action";
-import { SafeError } from "@/utils/error";
+import { describeError, SafeError } from "@/utils/error";
 import { generateFolderInstructionsBody } from "@/utils/actions/folder-rule.validation";
 import { createEmailProvider } from "@/utils/email/provider";
 import { getEmailAccountWithAiAndTokens } from "@/utils/user/get";
@@ -67,35 +67,3 @@ export const generateFolderInstructionsAction = actionClient
       }
     },
   );
-
-// Not every throwable is an Error: aborted fetches throw DOMException (which
-// doesn't extend Error) and some provider SDKs throw plain objects
-function describeError(error: unknown): string {
-  if (error instanceof Error) {
-    return `${error.name}: ${error.message}`.slice(0, 200);
-  }
-  if (typeof error === "string") return error.slice(0, 200);
-  if (error && typeof error === "object") {
-    const candidate = error as {
-      name?: unknown;
-      message?: unknown;
-      error?: { message?: unknown };
-    };
-    if (typeof candidate.message === "string" && candidate.message) {
-      const name =
-        typeof candidate.name === "string" && candidate.name
-          ? `${candidate.name}: `
-          : "";
-      return `${name}${candidate.message}`.slice(0, 200);
-    }
-    if (typeof candidate.error?.message === "string") {
-      return candidate.error.message.slice(0, 200);
-    }
-    try {
-      return JSON.stringify(error).slice(0, 200);
-    } catch {
-      return Object.prototype.toString.call(error);
-    }
-  }
-  return String(error).slice(0, 200);
-}
