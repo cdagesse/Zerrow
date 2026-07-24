@@ -235,8 +235,9 @@ function LogoPicker({
         })}
       </div>
       <p className="mt-1 text-xs text-muted-foreground">
-        Click a domain's logo to use it for the company. A custom URL can be set
-        from the edit dialog.
+        Click a domain's logo to use it for the company — it shows for everyone
+        here, across all of its domains. A custom URL can be set from the edit
+        dialog.
       </p>
     </div>
   );

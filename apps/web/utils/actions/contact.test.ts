@@ -27,7 +27,10 @@ vi.mock("@/utils/ai/contacts/enrich-contact", () => ({
   aiEnrichContact: aiEnrichContactMock,
 }));
 
-import { enrichContactAction } from "@/utils/actions/contact";
+import {
+  enrichContactAction,
+  updateContactAction,
+} from "@/utils/actions/contact";
 
 beforeEach(() => {
   vi.clearAllMocks();
@@ -120,5 +123,90 @@ describe("enrichContactAction", () => {
     });
 
     expect(result?.serverError).toContain("Your credit balance is too low");
+  });
+});
+
+describe("updateContactAction company lock", () => {
+  it("rejects moving a contact whose domain a company owns", async () => {
+    prisma.company.findFirst.mockResolvedValue({
+      id: "co-1",
+      name: "Vercel",
+    } as any);
+
+    const result = await updateContactAction("account-1", {
+      email: "rina@vercel.com",
+      companyName: "Acme",
+    });
+
+    expect(result?.serverError).toContain("Vercel owns the vercel.com domain");
+    expect(prisma.contact.upsert).not.toHaveBeenCalled();
+  });
+
+  it("keeps the owning company when the same name is re-submitted", async () => {
+    prisma.company.findFirst.mockResolvedValue({
+      id: "co-1",
+      name: "Vercel",
+    } as any);
+
+    await updateContactAction("account-1", {
+      email: "rina@vercel.com",
+      companyName: "Vercel",
+    });
+
+    expect(prisma.contact.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ companyId: "co-1" }),
+      }),
+    );
+  });
+
+  it("still assigns unclaimed-domain contacts, teaching the company the domain", async () => {
+    prisma.company.findFirst.mockResolvedValue(null);
+    prisma.company.upsert.mockResolvedValue({
+      id: "co-2",
+      name: "Acme",
+      domains: [],
+    } as any);
+    prisma.company.update.mockResolvedValue({} as any);
+
+    await updateContactAction("account-1", {
+      email: "bob@acme.com",
+      companyName: "Acme",
+    });
+
+    expect(prisma.contact.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ companyId: "co-2" }),
+      }),
+    );
+    // The company adopted the contact's domain, so acme.com colleagues
+    // group with it from now on
+    expect(prisma.company.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: { domains: ["acme.com"] },
+      }),
+    );
+  });
+
+  it("assigns public-email-domain contacts freely, without domain adoption", async () => {
+    prisma.company.upsert.mockResolvedValue({
+      id: "co-3",
+      name: "Acme",
+      domains: [],
+    } as any);
+
+    const result = await updateContactAction("account-1", {
+      email: "mom@gmail.com",
+      companyName: "Acme",
+    });
+
+    expect(result?.serverError).toBeUndefined();
+    expect(prisma.contact.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({
+        update: expect.objectContaining({ companyId: "co-3" }),
+      }),
+    );
+    // gmail.com must never become a company domain
+    expect(prisma.company.update).not.toHaveBeenCalled();
   });
 });

@@ -8,6 +8,7 @@ import { formatDistanceToNow } from "date-fns";
 import { CheckIcon, MailIcon, SparklesIcon, Trash2Icon } from "lucide-react";
 import {
   type CompanySummary,
+  companyOwningDomain,
   type ContactGroup,
   type ContactListItem,
   type DomainStat,
@@ -205,6 +206,12 @@ export function ContactDetails({
         key={formEpoch}
         contact={contact}
         companyName={company?.name ?? ""}
+        // Domain-owned membership is authoritative: the per-contact company
+        // field locks so one person's edit can't diverge from (or hijack)
+        // the domain's company
+        lockedCompanyName={
+          companyOwningDomain(contact.domain, companies)?.name ?? null
+        }
         mutateContacts={mutateContacts}
       />
 
@@ -222,10 +229,14 @@ type Suggestion = {
 function ContactEditForm({
   contact,
   companyName,
+  lockedCompanyName,
   mutateContacts,
 }: {
   contact: ContactListItem;
   companyName: string;
+  // Set when a company owns the contact's email domain — the company
+  // field is read-only then (change the company's domains instead)
+  lockedCompanyName: string | null;
   mutateContacts: () => void;
 }) {
   const { emailAccountId } = useAccount();
@@ -272,7 +283,9 @@ function ContactEditForm({
         ...(title
           ? [{ field: "title" as const, label: "Title", value: title }]
           : []),
-        ...(company
+        // Domain-owned membership can't be edited per contact, so a company
+        // suggestion would only lead to a rejected save
+        ...(company && !lockedCompanyName
           ? [
               {
                 field: "companyName" as const,
@@ -310,7 +323,10 @@ function ContactEditForm({
           name: values.name,
           title: values.title,
           phone: values.phone,
-          companyName: values.companyName,
+          // The form keeps a value even when the input is disabled — omit
+          // it so saving other fields can't trip the server's domain lock
+          companyName:
+            isPersonal || lockedCompanyName ? undefined : values.companyName,
           photoUrl: values.photoUrl.trim(),
           notes: values.notes,
           isPersonal,
@@ -389,10 +405,16 @@ function ContactEditForm({
           <Input
             id="contact-company"
             className="mt-2"
-            disabled={isPersonal}
+            disabled={isPersonal || !!lockedCompanyName}
             placeholder="Where they work"
             {...register("companyName")}
           />
+          {lockedCompanyName && !isPersonal && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Set automatically — {lockedCompanyName} owns @{contact.domain}.
+              Edit the company's domains to change it.
+            </p>
+          )}
         </div>
         <div>
           <Label htmlFor="contact-phone">Phone</Label>

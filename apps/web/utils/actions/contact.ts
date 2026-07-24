@@ -25,6 +25,7 @@ import {
 } from "@/utils/contacts-sync/google";
 import type { Logger } from "@/utils/logger";
 import { isPublicEmailDomain } from "@/utils/email";
+import { emailDomain } from "@/utils/contacts";
 import { createEmailProvider } from "@/utils/email/provider";
 import { getEmailAccountWithAiAndTokens } from "@/utils/user/get";
 import { getEmailForLLM } from "@/utils/get-email-from-message";
@@ -62,7 +63,7 @@ export const updateContactAction = actionClient
         ...(useCompanyLogo !== undefined && { useCompanyLogo }),
         ...(isPersonal !== undefined && { isPersonal }),
         ...(companyName !== undefined && {
-          companyId: await resolveCompanyId({
+          companyId: await resolveLockedCompanyId({
             emailAccountId,
             companyName,
             contactEmail: normalizedEmail,
@@ -370,6 +371,39 @@ export const updateCompanyAction = actionClient
     },
   );
 
+// Company membership is domain-authoritative: when a contact's email
+// domain already belongs to a company, their company can't be changed per
+// contact — edit the company's domain list (or mark the contact personal)
+// instead. This also means reassigning one person can never silently move
+// everyone else on their domain.
+async function resolveLockedCompanyId({
+  emailAccountId,
+  companyName,
+  contactEmail,
+}: {
+  emailAccountId: string;
+  companyName: string | null | undefined;
+  contactEmail: string;
+}): Promise<string | null> {
+  const domain = emailDomain(contactEmail);
+
+  if (domain && !isPublicEmailDomain(domain)) {
+    const owner = await prisma.company.findFirst({
+      where: { emailAccountId, domains: { has: domain } },
+      select: { id: true, name: true },
+    });
+
+    if (owner) {
+      if (companyName?.trim() === owner.name) return owner.id;
+      throw new SafeError(
+        `${owner.name} owns the ${domain} domain, so this contact's company is set automatically. Edit ${owner.name}'s domains to change that, or mark the contact as personal.`,
+      );
+    }
+  }
+
+  return resolveCompanyId({ emailAccountId, companyName, contactEmail });
+}
+
 // Assigning a contact to a company also teaches the company the contact's
 // email domain, so everyone else on that domain groups with it automatically
 async function resolveCompanyId({
@@ -384,7 +418,7 @@ async function resolveCompanyId({
   const name = companyName?.trim();
   if (!name) return null;
 
-  const domain = contactEmail.split("@")[1] ?? "";
+  const domain = emailDomain(contactEmail);
   const adoptDomain = !!domain && !isPublicEmailDomain(domain);
 
   const company = await prisma.company.upsert({
