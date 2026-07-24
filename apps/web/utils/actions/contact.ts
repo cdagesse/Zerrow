@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import {
   createCompanyBody,
+  deleteContactBody,
   enrichContactBody,
   setCarddavAccessBody,
   setGoogleContactsSyncBody,
@@ -17,6 +18,7 @@ import {
   hashCarddavPassword,
 } from "@/utils/carddav/auth";
 import {
+  deleteGoogleContact,
   pullGoogleContacts,
   pushContactToGoogle,
 } from "@/utils/contacts-sync/google";
@@ -82,6 +84,56 @@ export const updateContactAction = actionClient
       });
 
       return { contact };
+    },
+  );
+
+// Removes the saved details for a contact. The person still appears in the
+// list while email history with them exists — only the Contact row goes away.
+export const deleteContactAction = actionClient
+  .metadata({ name: "deleteContact" })
+  .inputSchema(deleteContactBody)
+  .action(
+    async ({ ctx: { emailAccountId, logger }, parsedInput: { email } }) => {
+      const normalizedEmail = email.trim().toLowerCase();
+
+      const contact = await prisma.contact.findUnique({
+        where: {
+          emailAccountId_email: { emailAccountId, email: normalizedEmail },
+        },
+        select: { googleResourceName: true },
+      });
+
+      await prisma.contact.deleteMany({
+        where: { emailAccountId, email: normalizedEmail },
+      });
+
+      // Two-way sync: without this the hourly pull resurrects the contact,
+      // and a later re-save would create a duplicate Google person
+      if (contact?.googleResourceName) {
+        const account = await prisma.emailAccount.findUnique({
+          where: { id: emailAccountId },
+          select: { googleContactsSyncEnabled: true },
+        });
+        if (account?.googleContactsSyncEnabled) {
+          const resourceName = contact.googleResourceName;
+          after(async () => {
+            try {
+              await deleteGoogleContact({
+                emailAccountId,
+                resourceName,
+                logger,
+              });
+            } catch (error) {
+              logger.warn("Failed to delete contact from Google", {
+                email: normalizedEmail,
+                error,
+              });
+            }
+          });
+        }
+      }
+
+      return { deleted: true };
     },
   );
 

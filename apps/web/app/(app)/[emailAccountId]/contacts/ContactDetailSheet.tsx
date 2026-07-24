@@ -1,17 +1,18 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { useAction } from "next-safe-action/hooks";
 import { formatDistanceToNow } from "date-fns";
-import { CheckIcon, MailIcon, SparklesIcon } from "lucide-react";
+import { CheckIcon, MailIcon, SparklesIcon, Trash2Icon } from "lucide-react";
 import {
   type CompanySummary,
   type ContactListItem,
   resolveContactCompany,
 } from "@/utils/contacts";
 import {
+  deleteContactAction,
   enrichContactAction,
   updateContactAction,
 } from "@/utils/actions/contact";
@@ -52,6 +53,7 @@ export function ContactDetailSheet({
             contact={contact}
             companies={companies}
             mutateContacts={mutateContacts}
+            onDeleted={onClose}
           />
         )}
       </SheetContent>
@@ -64,13 +66,42 @@ export function ContactDetails({
   contact,
   companies,
   mutateContacts,
+  onDeleted,
 }: {
   contact: ContactListItem;
   companies: CompanySummary[];
   mutateContacts: () => void;
+  // The mobile sheet closes on delete; the wide pane keeps showing the
+  // (now unsaved) contact and omits this
+  onDeleted?: () => void;
 }) {
   const { emailAccountId } = useAccount();
   const company = resolveContactCompany(contact, companies);
+
+  // Remount the edit form only when the saved row disappears (deleted here
+  // or by a synced client) so cleared fields don't linger. Keying on isSaved
+  // itself would also fire when enrichment saves a summary (unsaved → saved)
+  // and wipe the suggestions panel mid-flow.
+  const [formEpoch, setFormEpoch] = useState(0);
+  const wasSaved = useRef(contact.isSaved);
+  useEffect(() => {
+    if (wasSaved.current && !contact.isSaved) setFormEpoch((n) => n + 1);
+    wasSaved.current = contact.isSaved;
+  }, [contact.isSaved]);
+
+  const deleteContact = useAction(
+    deleteContactAction.bind(null, emailAccountId),
+    {
+      onSuccess: () => {
+        toastSuccess({ description: "Contact deleted" });
+        mutateContacts();
+        onDeleted?.();
+      },
+      onError: (error) => {
+        toastError({ description: getActionErrorMessage(error.error) });
+      },
+    },
+  );
 
   return (
     <div className="space-y-6">
@@ -117,19 +148,38 @@ export function ContactDetails({
         </p>
       </div>
 
-      <Button asChild variant="outline" size="sm">
-        <Link
-          href={prefixPath(
-            emailAccountId,
-            `/mail?q=${encodeURIComponent(contact.email)}`,
-          )}
-        >
-          <MailIcon className="mr-1.5 size-3.5" />
-          Search in Mail
-        </Link>
-      </Button>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button asChild variant="outline" size="sm">
+          <Link
+            href={prefixPath(
+              emailAccountId,
+              `/mail?q=${encodeURIComponent(contact.email)}`,
+            )}
+          >
+            <MailIcon className="mr-1.5 size-3.5" />
+            Search in Mail
+          </Link>
+        </Button>
+        {contact.isSaved && (
+          <Button
+            variant="destructiveSoft"
+            size="sm"
+            loading={deleteContact.isExecuting}
+            onClick={() => {
+              const yes = confirm(
+                "Delete this contact's saved details (and their Google Contacts entry when sync is on)? They'll still appear in the list while you have email history together.",
+              );
+              if (yes) deleteContact.execute({ email: contact.email });
+            }}
+          >
+            <Trash2Icon className="mr-1.5 size-3.5" />
+            Delete
+          </Button>
+        )}
+      </div>
 
       <ContactEditForm
+        key={formEpoch}
         contact={contact}
         companyName={company?.name ?? ""}
         mutateContacts={mutateContacts}

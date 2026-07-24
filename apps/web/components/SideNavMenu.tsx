@@ -49,7 +49,12 @@ export function SideNavMenu({
   return (
     <SidebarMenu>
       {items.map((item) => (
-        <SidebarMenuItem key={item.name} className="font-semibold">
+        // Names can repeat (e.g. a company named like a group); hrefs are
+        // unique per destination, so key on both
+        <SidebarMenuItem
+          key={`${item.href}|${item.name}`}
+          className="font-semibold"
+        >
           <SidebarMenuButton
             asChild
             isActive={item.active || activeHref === item.href}
