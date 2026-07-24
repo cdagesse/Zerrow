@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import useSWR from "swr";
 import { formatDistanceToNow } from "date-fns";
-import { PlusIcon, StickyNoteIcon } from "lucide-react";
+import { PlusIcon, RefreshCwIcon, StickyNoteIcon } from "lucide-react";
 import type { ContactsResponse } from "@/app/api/contacts/route";
 import {
   contactAvatarUrl,
@@ -28,6 +28,7 @@ import {
 import { ContactDetailSheet } from "./ContactDetailSheet";
 import { CompaniesView } from "./CompaniesView";
 import { AddContactDialog } from "./AddContactDialog";
+import { SyncSettingsDialog } from "./SyncSettingsDialog";
 
 const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
@@ -38,6 +39,7 @@ export function ContactsList() {
   // Track selection by email so the sheet re-reads fresh data after mutations
   const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
+  const [showSync, setShowSync] = useState(false);
 
   // Tabs sync selection to the URL, so view and sort live there too
   const searchParams = useSearchParams();
@@ -78,10 +80,16 @@ export function ContactsList() {
             </TabsList>
           </Tabs>
         )}
-        <Button size="sm" className="ml-auto" onClick={() => setAdding(true)}>
-          <PlusIcon className="mr-1.5 size-4" />
-          Add contact
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Button variant="outline" size="sm" onClick={() => setShowSync(true)}>
+            <RefreshCwIcon className="mr-1.5 size-3.5" />
+            Sync
+          </Button>
+          <Button size="sm" onClick={() => setAdding(true)}>
+            <PlusIcon className="mr-1.5 size-4" />
+            Add contact
+          </Button>
+        </div>
       </div>
 
       <div className="mt-4">
@@ -136,6 +144,14 @@ export function ContactsList() {
         onClose={() => setAdding(false)}
         mutateContacts={mutate}
       />
+      {data && (
+        <SyncSettingsDialog
+          open={showSync}
+          onClose={() => setShowSync(false)}
+          sync={data.sync}
+          mutateContacts={mutate}
+        />
+      )}
     </div>
   );
 }

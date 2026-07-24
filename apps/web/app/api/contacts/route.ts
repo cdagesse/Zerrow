@@ -117,7 +117,25 @@ async function getContacts({
           .includes(searchTerm)),
   );
 
-  return { contacts, companies, hasMore };
+  const syncState = await prisma.emailAccount.findUnique({
+    where: { id: emailAccountId },
+    select: {
+      googleContactsSyncEnabled: true,
+      googleContactsSyncedAt: true,
+      account: { select: { provider: true } },
+    },
+  });
+
+  return {
+    contacts,
+    companies,
+    hasMore,
+    sync: {
+      provider: syncState?.account.provider ?? null,
+      googleEnabled: syncState?.googleContactsSyncEnabled ?? false,
+      googleSyncedAt: syncState?.googleContactsSyncedAt ?? null,
+    },
+  };
 }
 
 async function queryContactActivity({
