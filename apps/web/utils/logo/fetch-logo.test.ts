@@ -1,0 +1,137 @@
+import { describe, expect, it, vi } from "vitest";
+import { fetchLogo, normalizeLogoDomain } from "@/utils/logo/fetch-logo";
+
+const PNG = "image/png";
+
+const image = (bytes: number, contentType = PNG) =>
+  new Response(new Uint8Array(bytes).fill(1), {
+    status: 200,
+    headers: { "content-type": contentType },
+  });
+
+describe("normalizeLogoDomain", () => {
+  it("lowercases, trims, and strips www.", () => {
+    expect(normalizeLogoDomain(" WWW.Example.COM ")).toBe("example.com");
+  });
+
+  it.each([
+    "toyota.co.uk",
+    "xn--bcher-kva.example",
+    "a-b.example.io",
+  ])("accepts %s", (domain) => {
+    expect(normalizeLogoDomain(domain)).toBe(domain);
+  });
+
+  it.each([
+    "",
+    "no-dots",
+    "192.168.1.1",
+    "127.0.0.1",
+    "-bad.example.com",
+    "bad-.example.com",
+    "exa mple.com",
+    "example.com/path",
+    "user@example.com",
+  ])("rejects %s", (input) => {
+    expect(normalizeLogoDomain(input)).toBe(null);
+  });
+});
+
+describe("fetchLogo", () => {
+  it("returns the first provider's image and stops the chain", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(image(2000));
+
+    const logo = await fetchLogo({ domain: "example.com", fetchImpl });
+
+    expect(logo?.contentType).toBe(PNG);
+    expect(logo?.body.byteLength).toBe(2000);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(fetchImpl.mock.calls[0][0]).toContain("logo.clearbit.com");
+  });
+
+  it("starts at logo.dev when a token is configured", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(image(2000));
+
+    await fetchLogo({ domain: "example.com", logoDevToken: "tok", fetchImpl });
+
+    expect(fetchImpl.mock.calls[0][0]).toContain("img.logo.dev");
+    expect(fetchImpl.mock.calls[0][0]).toContain("token=tok");
+  });
+
+  it("falls through on non-image, too-small, and error responses", async () => {
+    const fetchImpl = vi
+      .fn()
+      // clearbit: an HTML error page
+      .mockResolvedValueOnce(
+        new Response("<html>not found</html>", {
+          status: 200,
+          headers: { "content-type": "text/html" },
+        }),
+      )
+      // duckduckgo: a placeholder pixel below the size floor
+      .mockResolvedValueOnce(image(50))
+      // apple-touch-icon: network error
+      .mockRejectedValueOnce(new Error("boom"))
+      // apple-touch-icon-precomposed: a real image
+      .mockResolvedValueOnce(image(4096));
+
+    const logo = await fetchLogo({ domain: "example.com", fetchImpl });
+
+    expect(logo?.body.byteLength).toBe(4096);
+    expect(fetchImpl).toHaveBeenCalledTimes(4);
+    expect(fetchImpl.mock.calls[3][0]).toBe(
+      "https://example.com/apple-touch-icon-precomposed.png",
+    );
+  });
+
+  it("returns null when every provider fails", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(image(10));
+
+    expect(await fetchLogo({ domain: "example.com", fetchImpl })).toBe(null);
+    // full chain without logo.dev (no token): 6 providers
+    expect(fetchImpl).toHaveBeenCalledTimes(6);
+  });
+
+  it("follows redirects, revalidating each hop through the safe fetch", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce(
+        Response.redirect("https://cdn.example.com/logo.png", 302),
+      )
+      .mockResolvedValueOnce(image(2000));
+
+    const logo = await fetchLogo({ domain: "example.com", fetchImpl });
+
+    expect(logo?.body.byteLength).toBe(2000);
+    expect(fetchImpl.mock.calls[1][0]).toBe("https://cdn.example.com/logo.png");
+  });
+
+  it("refuses redirects to non-https URLs", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockImplementation((url: string) =>
+        Promise.resolve(
+          url.startsWith("http://")
+            ? image(5000)
+            : Response.redirect("http://internal.example.com/logo.png", 302),
+        ),
+      );
+
+    expect(await fetchLogo({ domain: "example.com", fetchImpl })).toBe(null);
+    expect(
+      fetchImpl.mock.calls.every(([url]: [string]) =>
+        url.startsWith("https://"),
+      ),
+    ).toBe(true);
+  });
+
+  it("gives up after three redirect hops per provider", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValue(Response.redirect("https://example.com/next", 302));
+
+    expect(await fetchLogo({ domain: "example.com", fetchImpl })).toBe(null);
+    // 6 providers × (1 request + 3 hops) = 24
+    expect(fetchImpl).toHaveBeenCalledTimes(24);
+  });
+});

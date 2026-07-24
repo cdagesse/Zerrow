@@ -294,8 +294,11 @@ export function isLikelyAutomatedSender(email: string): boolean {
   return labels.some((label) => AUTOMATED_DOMAIN_LABEL.test(label));
 }
 
+// Served by our SSRF-guarded provider chain (logo.dev → Clearbit →
+// DuckDuckGo → the domain's own icons → Google favicons) so the browser
+// never talks to those services directly. See app/api/public/logo.
 export function domainLogoUrl(domain: string) {
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128`;
+  return `/api/public/logo?domain=${encodeURIComponent(domain)}`;
 }
 
 // The avatar shown for a contact: company logo by default, personal photo

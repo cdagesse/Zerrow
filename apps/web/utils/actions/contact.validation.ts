@@ -1,6 +1,18 @@
 import { z } from "zod";
 
-const urlOrEmpty = z.string().url().max(2000).or(z.literal(""));
+// Absolute URLs, or an app-relative logo-proxy path (what the company
+// logo picker stores), or empty to clear
+const urlOrEmpty = z
+  .string()
+  .url()
+  .max(2000)
+  .or(
+    z
+      .string()
+      .regex(/^\/api\/public\/logo\?domain=[^\s]+$/)
+      .max(2000),
+  )
+  .or(z.literal(""));
 
 export const updateContactBody = z.object({
   email: z.string().email(),

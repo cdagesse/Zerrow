@@ -291,6 +291,9 @@ const parsedEnv = createEnv({
     HEALTH_API_KEY: z.string().optional(),
     OAUTH_PROXY_URL: z.string().url().optional(),
     IMAGE_PROXY_SIGNING_SECRET: z.string().min(16).optional(),
+    // Auth token for img.logo.dev, the first provider in the company logo
+    // chain (/api/public/logo); without it the chain starts at Clearbit
+    LOGO_DEV_TOKEN: z.string().optional(),
     // Set to true on the server that acts as the OAuth proxy (e.g., staging)
     IS_OAUTH_PROXY_SERVER: booleanString.optional().default(false),
     // Additional trusted origins for CORS (comma-separated, supports wildcards like https://*.vercel.app)

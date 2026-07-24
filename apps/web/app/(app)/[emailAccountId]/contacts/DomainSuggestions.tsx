@@ -174,6 +174,9 @@ function SuggestionRow({
             alt=""
             width={32}
             height={32}
+            onError={(event) => {
+              event.currentTarget.style.visibility = "hidden";
+            }}
             className="size-7 shrink-0 rounded bg-muted object-cover p-0.5"
           />
           <span className="min-w-0 truncate text-sm font-semibold uppercase tracking-wide">
