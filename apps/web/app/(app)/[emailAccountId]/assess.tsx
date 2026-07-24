@@ -36,8 +36,14 @@ export function AssessUser() {
       }
     }
 
-    assess();
-    executeAnalyzeWritingStyle();
+    // Delay past first paint: these background actions shouldn't contend
+    // with the thread list request on cold serverless starts
+    const timeout = setTimeout(() => {
+      assess();
+      executeAnalyzeWritingStyle();
+    }, 5000);
+
+    return () => clearTimeout(timeout);
   }, [emailAccountId, isAccountOwner]);
 
   return null;

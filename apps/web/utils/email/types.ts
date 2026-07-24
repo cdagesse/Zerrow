@@ -207,6 +207,8 @@ export interface EmailProvider {
     query?: ThreadsQuery;
     maxResults?: number;
     pageToken?: string;
+    /** "metadata" skips message bodies — for list views that only need headers/snippet/labels. Providers may ignore it. */
+    format?: "full" | "metadata";
   }): Promise<{
     threads: EmailThread[];
     nextPageToken?: string;

@@ -236,19 +236,27 @@ export const updateLabelAction = actionClient
       description: z.string().optional(),
       enabled: z.boolean(),
       gmailLabelId: z.string(),
+      icon: z.string().nullish(),
     }),
   )
   .action(
     async ({
       ctx: { emailAccountId },
-      parsedInput: { name, description, enabled, gmailLabelId },
+      parsedInput: { name, description, enabled, gmailLabelId, icon },
     }) => {
       // Unlike updateLabelsAction, disabling keeps the row (and its
       // description) so re-enabling doesn't start from scratch.
       await prisma.label.upsert({
         where: { name_emailAccountId: { name, emailAccountId } },
-        create: { gmailLabelId, name, description, enabled, emailAccountId },
-        update: { name, description, enabled, gmailLabelId },
+        create: {
+          gmailLabelId,
+          name,
+          description,
+          enabled,
+          emailAccountId,
+          icon,
+        },
+        update: { name, description, enabled, gmailLabelId, icon },
       });
     },
   );

@@ -88,12 +88,36 @@ export async function getThreadsWithNextPageToken({
   };
 }
 
+// Headers needed to render list rows (participant, subject, date, threading)
+const METADATA_HEADERS = [
+  "From",
+  "To",
+  "Cc",
+  "Reply-To",
+  "Subject",
+  "Date",
+  "Message-ID",
+  "References",
+  "In-Reply-To",
+  "List-Unsubscribe",
+];
+
 export async function getThreadsBatch(
   threadIds: string[],
   accessToken: string,
   logger: Logger,
+  options?: { format?: "full" | "metadata" },
 ): Promise<ThreadWithPayloadMessages[]> {
   if (!threadIds.length) return [];
+
+  // metadata format skips message bodies: ~10-50x smaller payloads when only
+  // headers/snippet/labels are needed (e.g. rendering the mail list)
+  const queryString =
+    options?.format === "metadata"
+      ? `format=metadata&${METADATA_HEADERS.map(
+          (header) => `metadataHeaders=${header}`,
+        ).join("&")}`
+      : undefined;
 
   return getBatchWithRetry<
     ThreadWithPayloadMessages,
@@ -103,6 +127,7 @@ export async function getThreadsBatch(
     endpoint: "/gmail/v1/users/me/threads",
     accessToken,
     parse: (thread) => thread,
+    queryString,
     logger,
   });
 }

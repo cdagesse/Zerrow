@@ -5,6 +5,7 @@ import useSWRInfinite from "swr/infinite";
 import { useSetAtom } from "jotai";
 import { SearchIcon, XIcon } from "lucide-react";
 import { List } from "@/components/email-list/EmailList";
+import { EmailListSkeleton } from "@/components/email-list/EmailListSkeleton";
 import { LoadingContent } from "@/components/LoadingContent";
 import type { ThreadsQuery } from "@/utils/threads/validation";
 import type { ThreadsResponse } from "@/app/api/threads/route";
@@ -146,7 +147,11 @@ export default function Mail(props: {
           </button>
         )}
       </div>
-      <LoadingContent loading={isLoading && !data} error={error}>
+      <LoadingContent
+        loading={isLoading && !data}
+        error={error}
+        loadingComponent={<EmailListSkeleton />}
+      >
         {allThreads && (
           <List
             emails={allThreads}
