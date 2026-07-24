@@ -86,9 +86,7 @@ export function mergeContactActivity({
     const lastInteractionAt = entry?.lastInteractionAt ?? null;
     return {
       email,
-      // Strip "www." so grouping, ignore filters, and company domain
-      // matching (which normalize the same way) all agree
-      domain: (email.split("@")[1] ?? "").replace(/^www\./, ""),
+      domain: emailDomain(email),
       name: savedContact?.name || entry?.name || null,
       title: savedContact?.title ?? null,
       phone: savedContact?.phone ?? null,
@@ -121,6 +119,22 @@ export function mergeContactActivity({
   return merged;
 }
 
+// The domain half of an email address, normalized the same way company
+// domains are stored (lowercased upstream, "www." stripped)
+export function emailDomain(email: string): string {
+  return (email.split("@")[1] ?? "").replace(/^www\./, "");
+}
+
+// The company that owns an email domain; public provider domains (gmail.com
+// etc.) are never owned
+export function companyOwningDomain<T extends Pick<CompanySummary, "domains">>(
+  domain: string,
+  companies: T[],
+): T | null {
+  if (!domain || isPublicEmailDomain(domain)) return null;
+  return companies.find((company) => company.domains.includes(domain)) ?? null;
+}
+
 // Explicit assignment wins; otherwise a company claims contacts through its
 // domains. Personal contacts never group by company.
 export function resolveContactCompany(
@@ -133,11 +147,7 @@ export function resolveContactCompany(
       companies.find((company) => company.id === contact.companyId) ?? null
     );
   }
-  if (!contact.domain || isPublicEmailDomain(contact.domain)) return null;
-  return (
-    companies.find((company) => company.domains.includes(contact.domain)) ??
-    null
-  );
+  return companyOwningDomain(contact.domain, companies);
 }
 
 export function groupContacts({

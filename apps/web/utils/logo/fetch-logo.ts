@@ -46,11 +46,21 @@ export async function fetchLogo({
   fetchImpl?: (input: string, init?: RequestInit) => Promise<Response>;
 }): Promise<FetchedLogo | null> {
   const deadline = Date.now() + TOTAL_BUDGET_MS;
+  // A host that just timed out won't answer for its other candidate paths
+  // either — skip them instead of burning 4s on each
+  const unresponsiveHosts = new Set<string>();
 
   for (const url of providerUrls(domain, logoDevToken)) {
-    if (Date.now() >= deadline) return null;
-    const logo = await attemptFetch(url, fetchImpl);
-    if (logo) return logo;
+    // Attempts must FINISH inside the budget, or the route itself gets
+    // killed by the platform's function timeout and the client sees a 5xx
+    if (Date.now() + ATTEMPT_TIMEOUT_MS > deadline) return null;
+
+    const host = new URL(url).hostname;
+    if (unresponsiveHosts.has(host)) continue;
+
+    const attempt = await attemptFetch(url, fetchImpl);
+    if (attempt.logo) return attempt.logo;
+    if (attempt.timedOut) unresponsiveHosts.add(host);
   }
 
   return null;
@@ -76,21 +86,30 @@ function providerUrls(domain: string, logoDevToken?: string): string[] {
 async function attemptFetch(
   url: string,
   fetchImpl: (input: string, init?: RequestInit) => Promise<Response>,
-): Promise<FetchedLogo | null> {
+): Promise<{ logo: FetchedLogo | null; timedOut: boolean }> {
   try {
     const response = await fetchWithRedirects(url, fetchImpl);
-    if (!response?.ok) return null;
+    if (!response?.ok) return { logo: null, timedOut: false };
 
     const contentType = response.headers.get("content-type") ?? "";
-    if (!contentType.startsWith("image/")) return null;
+    if (!contentType.startsWith("image/")) {
+      return { logo: null, timedOut: false };
+    }
 
     const body = await response.arrayBuffer();
-    if (body.byteLength < MIN_IMAGE_BYTES) return null;
+    if (body.byteLength < MIN_IMAGE_BYTES) {
+      return { logo: null, timedOut: false };
+    }
 
-    return { body, contentType };
-  } catch {
-    // Timeouts, DNS failures, TLS errors — just move down the chain
-    return null;
+    return { logo: { body, contentType }, timedOut: false };
+  } catch (error) {
+    // DNS failures and TLS errors just move down the chain; timeouts are
+    // reported so the caller can skip the host's remaining candidates
+    const name = error instanceof Error ? error.name : "";
+    return {
+      logo: null,
+      timedOut: name === "AbortError" || name === "TimeoutError",
+    };
   }
 }
 

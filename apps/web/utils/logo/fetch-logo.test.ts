@@ -125,6 +125,33 @@ describe("fetchLogo", () => {
     ).toBe(true);
   });
 
+  it("skips a host's remaining candidates after it times out", async () => {
+    const timeout = Object.assign(new Error("aborted"), {
+      name: "AbortError",
+    });
+    const fetchImpl = vi.fn().mockImplementation((url: string) => {
+      if (url.startsWith("https://example.com/")) {
+        return Promise.reject(timeout);
+      }
+      return Promise.resolve(image(10)); // junk from the other providers
+    });
+
+    expect(await fetchLogo({ domain: "example.com", fetchImpl })).toBe(null);
+
+    // apple-touch-icon timed out → the precomposed and favicon.ico probes
+    // on the same unresponsive host are skipped
+    const ownDomainCalls = fetchImpl.mock.calls.filter(([url]: [string]) =>
+      url.startsWith("https://example.com/"),
+    );
+    expect(ownDomainCalls).toHaveLength(1);
+    // …but the chain still reaches the remaining providers
+    expect(
+      fetchImpl.mock.calls.some(([url]: [string]) =>
+        url.includes("google.com/s2"),
+      ),
+    ).toBe(true);
+  });
+
   it("gives up after three redirect hops per provider", async () => {
     const fetchImpl = vi
       .fn()
