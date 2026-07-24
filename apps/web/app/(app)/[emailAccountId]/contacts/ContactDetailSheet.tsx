@@ -5,13 +5,16 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { useAction } from "next-safe-action/hooks";
 import { formatDistanceToNow } from "date-fns";
-import { MailIcon } from "lucide-react";
+import { CheckIcon, MailIcon, SparklesIcon } from "lucide-react";
 import {
   type CompanySummary,
   type ContactListItem,
   resolveContactCompany,
 } from "@/utils/contacts";
-import { updateContactAction } from "@/utils/actions/contact";
+import {
+  enrichContactAction,
+  updateContactAction,
+} from "@/utils/actions/contact";
 import { useAccount } from "@/providers/EmailAccountProvider";
 import { useThreads } from "@/hooks/useThreads";
 import { prefixPath } from "@/utils/path";
@@ -141,6 +144,12 @@ function ContactDetails({
   );
 }
 
+type Suggestion = {
+  field: "name" | "title" | "companyName" | "phone";
+  label: string;
+  value: string;
+};
+
 function ContactEditForm({
   contact,
   companyName,
@@ -153,8 +162,9 @@ function ContactEditForm({
   const { emailAccountId } = useAccount();
   const [isPersonal, setIsPersonal] = useState(contact.isPersonal);
   const [useCompanyLogo, setUseCompanyLogo] = useState(contact.useCompanyLogo);
+  const [suggestions, setSuggestions] = useState<Suggestion[]>([]);
 
-  const { register, handleSubmit } = useForm<{
+  const { register, handleSubmit, setValue } = useForm<{
     name: string;
     title: string;
     phone: string;
@@ -182,6 +192,46 @@ function ContactEditForm({
     },
   });
 
+  const enrich = useAction(enrichContactAction.bind(null, emailAccountId), {
+    onSuccess: (result) => {
+      if (!result.data) return;
+      const { name, title, company, phones } = result.data.suggestions;
+      const found: Suggestion[] = [
+        ...(name
+          ? [{ field: "name" as const, label: "Name", value: name }]
+          : []),
+        ...(title
+          ? [{ field: "title" as const, label: "Title", value: title }]
+          : []),
+        ...(company
+          ? [
+              {
+                field: "companyName" as const,
+                label: "Company",
+                value: company,
+              },
+            ]
+          : []),
+        ...phones.map((phone) => ({
+          field: "phone" as const,
+          label: "Phone",
+          value: phone,
+        })),
+      ];
+      setSuggestions(found);
+      // The relationship summary was saved server-side — refresh to show it
+      mutateContacts();
+      if (!found.length) {
+        toastSuccess({
+          description: "Summary updated. No new details found in their emails.",
+        });
+      }
+    },
+    onError: (error) => {
+      toastError({ description: getActionErrorMessage(error.error) });
+    },
+  });
+
   return (
     <form
       className="space-y-4"
@@ -199,6 +249,56 @@ function ContactEditForm({
         }),
       )}
     >
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-medium">Details</h3>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          loading={enrich.isExecuting}
+          onClick={() => enrich.execute({ email: contact.email })}
+        >
+          <SparklesIcon className="mr-1.5 size-3.5" />
+          Suggest from emails
+        </Button>
+      </div>
+
+      {suggestions.length > 0 && (
+        <div className="space-y-2 rounded-md border border-border p-3">
+          <p className="text-sm font-medium">Found in their emails</p>
+          {suggestions.map((suggestion) => (
+            <div
+              key={`${suggestion.field}-${suggestion.value}`}
+              className="flex items-center justify-between gap-2 text-sm"
+            >
+              <span className="min-w-0 truncate text-muted-foreground">
+                {suggestion.label}:{" "}
+                <span className="text-foreground">{suggestion.value}</span>
+              </span>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                onClick={() => {
+                  setValue(suggestion.field, suggestion.value, {
+                    shouldDirty: true,
+                  });
+                  setSuggestions((prev) =>
+                    prev.filter((s) => s !== suggestion),
+                  );
+                }}
+              >
+                <CheckIcon className="mr-1 size-3" />
+                Apply
+              </Button>
+            </div>
+          ))}
+          <p className="text-xs text-muted-foreground">
+            Apply the ones that look right, then save.
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label htmlFor="contact-name">Name</Label>
