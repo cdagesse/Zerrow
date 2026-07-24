@@ -60,7 +60,16 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
 
   const [input, setInput] = useState<string>("");
   const [chatId, setChatId] = useQueryState("chatId", parseAsString);
-  const [context, setContext] = useState<MessageContext | null>(null);
+  // The chat transport below is created once per chat id, so its
+  // prepareSendMessagesRequest closure would only ever see the context
+  // value from that render. Mirror it into a ref (like inline actions) so
+  // sends read the value that's current at send time.
+  const [context, setContextState] = useState<MessageContext | null>(null);
+  const contextRef = useRef<MessageContext | null>(null);
+  const setContext = useCallback((value: MessageContext | null) => {
+    contextRef.current = value;
+    setContextState(value);
+  }, []);
   const [attachments, setAttachments] = useState<Attachment[]>([]);
   const [inlineActions, setInlineActions] = useState<InlineEmailAction[]>([]);
   const inlineActionsRef = useRef(inlineActions);
@@ -99,7 +108,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
           body: {
             id,
             message: messages.at(-1),
-            context: context ?? undefined,
+            context: contextRef.current ?? undefined,
             inlineActions: pendingInlineActionsRef.current ?? undefined,
             ...body,
           },
@@ -167,7 +176,7 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     setContext(null);
     setAttachments([]);
     setInlineActions([]);
-  }, [chat.setMessages, emailAccountId, setChatId]);
+  }, [chat.setMessages, emailAccountId, setChatId, setContext]);
 
   const sendMessageParts = useCallback(
     async (
