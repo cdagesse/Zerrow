@@ -4,11 +4,9 @@ import { useMemo, useState } from "react";
 import { useAction } from "next-safe-action/hooks";
 import { useForm } from "react-hook-form";
 import {
-  BookmarkPlusIcon,
   BuildingIcon,
   ChevronDownIcon,
   ChevronRightIcon,
-  Loader2Icon,
   PencilIcon,
   UserIcon,
 } from "lucide-react";
@@ -18,17 +16,13 @@ import {
   type ContactListItem,
   groupContacts,
 } from "@/utils/contacts";
-import {
-  createCompanyAction,
-  updateCompanyAction,
-} from "@/utils/actions/contact";
+import { updateCompanyAction } from "@/utils/actions/contact";
 import type { UpdateCompanyBody } from "@/utils/actions/contact.validation";
 import { useAccount } from "@/providers/EmailAccountProvider";
 import { getActionErrorMessage } from "@/utils/error";
 import { toastError, toastSuccess } from "@/components/Toast";
 import { cn } from "@/utils";
 import { Badge } from "@/components/Badge";
-import { Tooltip } from "@/components/Tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -58,8 +52,12 @@ export function CompaniesView({
 }) {
   const [editing, setEditing] = useState<CompanySummary | null>(null);
 
+  // Only purposely-added companies (plus Personal) — auto domain groups
+  // live in the Suggested view until the user adds or ignores them
   const groups = useMemo(() => {
-    const all = groupContacts({ contacts, companies });
+    const all = groupContacts({ contacts, companies }).filter(
+      (group) => group.company || group.key === "personal",
+    );
     if (!labelFilter) return all;
     return all.filter(
       (group) =>
@@ -69,14 +67,14 @@ export function CompaniesView({
   }, [contacts, companies, labelFilter]);
 
   // Labeled companies section by label path ("Factory" then "Factory > …"),
-  // then unlabeled companies and auto domain groups, then Personal/Other
+  // then unlabeled companies, then Personal
   const sections = useMemo(() => {
     const byLabel = new Map<string, ContactGroup[]>();
     const unlabeled: ContactGroup[] = [];
     const special: ContactGroup[] = [];
 
     for (const group of groups) {
-      if (group.key === "personal" || group.key === "other") {
+      if (group.key === "personal") {
         special.push(group);
       } else if (group.company?.label) {
         const label = group.company.label;
@@ -98,6 +96,15 @@ export function CompaniesView({
     ];
   }, [groups]);
 
+  if (!sections.length) {
+    return (
+      <p className="py-12 text-center text-sm text-muted-foreground">
+        No companies yet. Check the Suggested tab to add them from the domains
+        in your email, or use “Add contact” and set a company.
+      </p>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {sections.map((section) => (
@@ -116,7 +123,6 @@ export function CompaniesView({
                 onEdit={
                   group.company ? () => setEditing(group.company) : undefined
                 }
-                mutate={mutate}
               />
             ))}
           </div>
@@ -140,28 +146,14 @@ function CompanyRow({
   activeEmail,
   onSelectContact,
   onEdit,
-  mutate,
 }: {
   group: ContactGroup;
   companies: CompanySummary[];
   activeEmail: string | null;
   onSelectContact: (contact: ContactListItem) => void;
   onEdit?: () => void;
-  mutate: () => void;
 }) {
   const [open, setOpen] = useState(false);
-  const { emailAccountId } = useAccount();
-
-  const isVirtualDomain = group.key.startsWith("domain:");
-  const create = useAction(createCompanyAction.bind(null, emailAccountId), {
-    onSuccess: () => {
-      toastSuccess({ description: "Company saved" });
-      mutate();
-    },
-    onError: (error) => {
-      toastError({ description: getActionErrorMessage(error.error) });
-    },
-  });
 
   return (
     <div className="bg-background">
@@ -211,25 +203,6 @@ function CompanyRow({
             <span className="sr-only">Edit company</span>
             <PencilIcon className="size-4" />
           </Button>
-        )}
-        {isVirtualDomain && (
-          <Tooltip content="Save as company">
-            <Button
-              variant="ghost"
-              size="iconSm"
-              disabled={create.isExecuting}
-              onClick={() =>
-                create.execute({ name: group.name, domains: group.domains })
-              }
-            >
-              <span className="sr-only">Save as company</span>
-              {create.isExecuting ? (
-                <Loader2Icon className="size-4 animate-spin" />
-              ) : (
-                <BookmarkPlusIcon className="size-4" />
-              )}
-            </Button>
-          </Tooltip>
         )}
       </div>
 

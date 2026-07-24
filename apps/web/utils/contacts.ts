@@ -86,7 +86,9 @@ export function mergeContactActivity({
     const lastInteractionAt = entry?.lastInteractionAt ?? null;
     return {
       email,
-      domain: email.split("@")[1] ?? "",
+      // Strip "www." so grouping, ignore filters, and company domain
+      // matching (which normalize the same way) all agree
+      domain: (email.split("@")[1] ?? "").replace(/^www\./, ""),
       name: savedContact?.name || entry?.name || null,
       title: savedContact?.title ?? null,
       phone: savedContact?.phone ?? null,
@@ -217,6 +219,20 @@ export function groupContacts({
       return (aSpecial + 1 || 99) - (bSpecial + 1 || 99);
     return b.contacts.length - a.contacts.length;
   });
+}
+
+// Auto domain groups that haven't been added as (or to) a company and
+// haven't been dismissed — the "Suggested" list. Shared by the page, the
+// tab count, and the sidebar so they can't drift apart.
+export function pendingDomainGroups(
+  groups: ContactGroup[],
+  ignoredDomains: string[],
+): ContactGroup[] {
+  const ignored = new Set(ignoredDomains);
+  return groups.filter(
+    (group) =>
+      group.key.startsWith("domain:") && !ignored.has(group.domains[0]),
+  );
 }
 
 export function domainLogoUrl(domain: string) {

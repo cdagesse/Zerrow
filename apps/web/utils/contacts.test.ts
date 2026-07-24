@@ -80,6 +80,16 @@ describe("mergeContactActivity", () => {
     });
   });
 
+  it("strips www. from the derived domain so it matches normalized company domains", () => {
+    const result = mergeContactActivity({
+      activity: [activity({ email: "bot@www.example.com" })],
+      saved: [],
+      now: NOW,
+    });
+
+    expect(result[0].domain).toBe("example.com");
+  });
+
   it("saved details override derived ones, matching case-insensitively", () => {
     const result = mergeContactActivity({
       activity: [activity()],

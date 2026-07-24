@@ -123,6 +123,7 @@ async function getContacts({
       googleContactsSyncEnabled: true,
       googleContactsSyncedAt: true,
       carddavPasswordHash: true,
+      ignoredContactDomains: true,
       account: { select: { provider: true } },
     },
   });
@@ -131,6 +132,7 @@ async function getContacts({
     contacts,
     companies,
     hasMore,
+    ignoredDomains: syncState?.ignoredContactDomains ?? [],
     sync: {
       provider: syncState?.account.provider ?? null,
       googleEnabled: syncState?.googleContactsSyncEnabled ?? false,

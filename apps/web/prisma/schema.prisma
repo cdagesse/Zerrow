@@ -172,6 +172,8 @@ model EmailAccount {
   googleContactsSyncedAt    DateTime?
   // App password (hashed) for CardDAV clients like iOS Contacts
   carddavPasswordHash       String?
+  // Email domains dismissed from the contacts "Suggested companies" list
+  ignoredContactDomains     String[]  @default([])
 
   digestSendEmail     Boolean   @default(true)
   digestSchedule      Schedule?

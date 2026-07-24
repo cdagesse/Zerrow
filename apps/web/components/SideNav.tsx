@@ -7,7 +7,7 @@ import useSWR from "swr";
 import type { LabelCountsResponse } from "@/app/api/labels/counts/route";
 import type { ContactsResponse } from "@/app/api/contacts/route";
 import type { UserLabelsResponse } from "@/app/api/user/labels/route";
-import { groupContacts } from "@/utils/contacts";
+import { groupContacts, pendingDomainGroups } from "@/utils/contacts";
 import { getLabelIcon } from "@/utils/label-icons";
 import { getEmailTerminology } from "@/utils/terminology";
 import {
@@ -300,14 +300,11 @@ function ContactsNav({ path }: { path: string }) {
       }
     }
 
-    // Companies without a label (saved ones and auto domain groups) — the
-    // biggest ones first, capped so the panel stays scannable
+    // Saved companies without a label — the biggest ones first, capped so
+    // the panel stays scannable. Auto domain groups live in Suggested.
     const unlabeled = groups.filter(
       (group) =>
-        group.key !== "personal" &&
-        group.key !== "other" &&
-        !group.company?.label &&
-        group.contacts.length > 0,
+        group.company && !group.company.label && group.contacts.length > 0,
     );
     for (const group of unlabeled.slice(0, 12)) {
       base.push({
@@ -339,6 +336,21 @@ function ContactsNav({ path }: { path: string }) {
         icon: () => <FolderDot name="Other" />,
         count: other.contacts.length,
         active: currentGroup === "other",
+      });
+    }
+
+    // Domains seen in email but not yet added as (or to) a company
+    const suggestedCount = pendingDomainGroups(
+      groups,
+      data.ignoredDomains,
+    ).length;
+    if (suggestedCount > 0) {
+      base.push({
+        name: "Suggested",
+        href: `${contactsPath}?view=suggested`,
+        icon: () => <FolderDot name="Suggested" />,
+        count: suggestedCount,
+        active: searchParams.get("view") === "suggested",
       });
     }
 
