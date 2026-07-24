@@ -12,7 +12,7 @@ export const APPS: Array<{
   id: "mail" | "contacts" | "settings";
   name: string;
   icon: LucideIcon;
-  path: string;
+  path: `/${string}`;
 }> = [
   { id: "mail", name: "Mail", icon: MailsIcon, path: "/mail" },
   { id: "contacts", name: "Contacts", icon: UsersRoundIcon, path: "/contacts" },
