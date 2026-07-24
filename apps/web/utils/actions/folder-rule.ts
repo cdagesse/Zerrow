@@ -152,16 +152,44 @@ export const generateFolderInstructionsAction = actionClient
         logger.error("Error generating folder instructions", { error });
         // Surface the underlying cause: without it, config problems (model,
         // key, quota) are indistinguishable from transient failures
-        const reason =
-          error instanceof Error
-            ? error.message.slice(0, 160)
-            : "unknown error";
         throw new SafeError(
-          `Could not generate instructions from this folder: ${reason}`,
+          `Could not generate instructions from this folder: ${describeError(error)}`,
         );
       }
     },
   );
+
+// Not every throwable is an Error: aborted fetches throw DOMException (which
+// doesn't extend Error) and some provider SDKs throw plain objects
+function describeError(error: unknown): string {
+  if (error instanceof Error) {
+    return `${error.name}: ${error.message}`.slice(0, 200);
+  }
+  if (typeof error === "string") return error.slice(0, 200);
+  if (error && typeof error === "object") {
+    const candidate = error as {
+      name?: unknown;
+      message?: unknown;
+      error?: { message?: unknown };
+    };
+    if (typeof candidate.message === "string" && candidate.message) {
+      const name =
+        typeof candidate.name === "string" && candidate.name
+          ? `${candidate.name}: `
+          : "";
+      return `${name}${candidate.message}`.slice(0, 200);
+    }
+    if (typeof candidate.error?.message === "string") {
+      return candidate.error.message.slice(0, 200);
+    }
+    try {
+      return JSON.stringify(error).slice(0, 200);
+    } catch {
+      return Object.prototype.toString.call(error);
+    }
+  }
+  return String(error).slice(0, 200);
+}
 
 async function findAvailableRuleName(
   emailAccountId: string,
