@@ -296,6 +296,8 @@ function AddCompanyDialog({
   const domain = group.domains[0];
   const [name, setName] = useState(suggestCompanyName(domain));
   const [existingName, setExistingName] = useState("");
+  // Which button submitted, so only that one shows the spinner
+  const [intent, setIntent] = useState<"new" | "existing" | null>(null);
 
   const create = useAction(createCompanyAction.bind(null, emailAccountId), {
     onSuccess: () => {
@@ -328,11 +330,12 @@ function AddCompanyDialog({
                 onChange={(event) => setName(event.target.value)}
               />
               <Button
-                loading={create.isExecuting}
-                disabled={!name.trim()}
-                onClick={() =>
-                  create.execute({ name: name.trim(), domains: [domain] })
-                }
+                loading={create.isExecuting && intent === "new"}
+                disabled={!name.trim() || create.isExecuting}
+                onClick={() => {
+                  setIntent("new");
+                  create.execute({ name: name.trim(), domains: [domain] });
+                }}
               >
                 Create
               </Button>
@@ -359,13 +362,14 @@ function AddCompanyDialog({
                 </Select>
                 <Button
                   variant="outline"
-                  loading={create.isExecuting}
-                  disabled={!existingName}
+                  loading={create.isExecuting && intent === "existing"}
+                  disabled={!existingName || create.isExecuting}
                   // createCompanyAction upserts by name and merges domains,
                   // so this atomically teaches the picked company the domain
-                  onClick={() =>
-                    create.execute({ name: existingName, domains: [domain] })
-                  }
+                  onClick={() => {
+                    setIntent("existing");
+                    create.execute({ name: existingName, domains: [domain] });
+                  }}
                 >
                   Add
                 </Button>
@@ -378,11 +382,25 @@ function AddCompanyDialog({
   );
 }
 
-// "mail.anthropic.com" → "Anthropic": the second-level label is almost
-// always the brand; the user can edit before saving
+// "mail.anthropic.com" → "Anthropic": the second-to-last label is usually
+// the brand — unless it's a public second-level suffix ("toyota.co.uk" must
+// suggest "Toyota", not "Co"). The user can edit before saving.
+const PUBLIC_SECOND_LEVELS = new Set([
+  "co",
+  "com",
+  "net",
+  "org",
+  "ac",
+  "gov",
+  "edu",
+]);
+
 function suggestCompanyName(domain: string) {
   const parts = domain.split(".").filter(Boolean);
-  const brand = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+  let brand = parts.length >= 2 ? parts[parts.length - 2] : parts[0];
+  if (parts.length >= 3 && PUBLIC_SECOND_LEVELS.has(brand)) {
+    brand = parts[parts.length - 3];
+  }
   if (!brand) return domain;
   return brand.charAt(0).toUpperCase() + brand.slice(1);
 }

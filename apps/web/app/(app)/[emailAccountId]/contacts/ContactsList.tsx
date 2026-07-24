@@ -56,7 +56,10 @@ export function ContactsList() {
       : "companies";
   const sort = searchParams.get("sort") === "frequent" ? "frequent" : "recent";
   const groupKey = searchParams.get("group");
-  const labelFilter = searchParams.get("label");
+  // A label selection carries across the Companies/People tabs but means
+  // nothing on Suggested — dropping it there keeps the header and detail
+  // pane from contradicting the suggestions list
+  const labelFilter = view === "suggested" ? null : searchParams.get("label");
 
   const params = new URLSearchParams({ sort, limit: String(limit) });
   if (search) params.set("search", search);

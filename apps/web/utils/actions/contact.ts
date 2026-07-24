@@ -305,7 +305,9 @@ export const createCompanyAction = actionClient
     },
   );
 
-// Hides a domain from (or restores it to) the Suggested companies list
+// Hides a domain from (or restores it to) the Suggested companies list.
+// Atomic single-statement updates so rapid-fire ignores don't lose each
+// other to a read-modify-write race.
 export const setDomainIgnoredAction = actionClient
   .metadata({ name: "setDomainIgnored" })
   .inputSchema(setDomainIgnoredBody)
@@ -314,20 +316,20 @@ export const setDomainIgnoredAction = actionClient
       const [normalized] = normalizeDomains([domain]);
       if (!normalized) throw new SafeError("Invalid domain");
 
-      const account = await prisma.emailAccount.findUnique({
-        where: { id: emailAccountId },
-        select: { ignoredContactDomains: true },
-      });
-      const current = account?.ignoredContactDomains ?? [];
-
-      const next = ignored
-        ? [...new Set([...current, normalized])]
-        : current.filter((existing) => existing !== normalized);
-
-      await prisma.emailAccount.update({
-        where: { id: emailAccountId },
-        data: { ignoredContactDomains: next },
-      });
+      if (ignored) {
+        await prisma.$executeRaw`
+          UPDATE "EmailAccount"
+          SET "ignoredContactDomains" = (
+            SELECT COALESCE(array_agg(DISTINCT d), ARRAY[]::text[])
+            FROM unnest(array_append("ignoredContactDomains", ${normalized})) AS d
+          )
+          WHERE id = ${emailAccountId}`;
+      } else {
+        await prisma.$executeRaw`
+          UPDATE "EmailAccount"
+          SET "ignoredContactDomains" = array_remove("ignoredContactDomains", ${normalized})
+          WHERE id = ${emailAccountId}`;
+      }
 
       return { domain: normalized, ignored };
     },
