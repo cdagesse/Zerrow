@@ -300,6 +300,25 @@ function ContactsNav({ path }: { path: string }) {
       }
     }
 
+    // Companies without a label (saved ones and auto domain groups) — the
+    // biggest ones first, capped so the panel stays scannable
+    const unlabeled = groups.filter(
+      (group) =>
+        group.key !== "personal" &&
+        group.key !== "other" &&
+        !group.company?.label &&
+        group.contacts.length > 0,
+    );
+    for (const group of unlabeled.slice(0, 12)) {
+      base.push({
+        name: group.name,
+        href: `${contactsPath}?group=${encodeURIComponent(group.key)}`,
+        icon: () => <FolderDot name={group.name} />,
+        count: group.contacts.length,
+        active: currentGroup === group.key,
+      });
+    }
+
     const personal = groups.find((group) => group.key === "personal");
     if (personal) {
       base.push({
@@ -308,6 +327,18 @@ function ContactsNav({ path }: { path: string }) {
         icon: () => <FolderDot name="Personal" />,
         count: personal.contacts.length,
         active: currentGroup === "personal",
+      });
+    }
+
+    // People at public email domains who aren't marked personal
+    const other = groups.find((group) => group.key === "other");
+    if (other) {
+      base.push({
+        name: "Other",
+        href: `${contactsPath}?group=other`,
+        icon: () => <FolderDot name="Other" />,
+        count: other.contacts.length,
+        active: currentGroup === "other",
       });
     }
 

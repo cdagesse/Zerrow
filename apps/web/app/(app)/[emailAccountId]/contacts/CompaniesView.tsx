@@ -4,11 +4,12 @@ import { useMemo, useState } from "react";
 import { useAction } from "next-safe-action/hooks";
 import { useForm } from "react-hook-form";
 import {
+  BookmarkPlusIcon,
   BuildingIcon,
   ChevronDownIcon,
   ChevronRightIcon,
+  Loader2Icon,
   PencilIcon,
-  PlusIcon,
   UserIcon,
 } from "lucide-react";
 import {
@@ -25,7 +26,9 @@ import type { UpdateCompanyBody } from "@/utils/actions/contact.validation";
 import { useAccount } from "@/providers/EmailAccountProvider";
 import { getActionErrorMessage } from "@/utils/error";
 import { toastError, toastSuccess } from "@/components/Toast";
+import { cn } from "@/utils";
 import { Badge } from "@/components/Badge";
+import { Tooltip } from "@/components/Tooltip";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -41,6 +44,7 @@ export function CompaniesView({
   contacts,
   companies,
   labelFilter,
+  activeEmail,
   onSelectContact,
   mutate,
 }: {
@@ -48,6 +52,7 @@ export function CompaniesView({
   companies: CompanySummary[];
   // Restrict to companies under this label id (from the sidebar's GROUPS)
   labelFilter?: string | null;
+  activeEmail: string | null;
   onSelectContact: (contact: ContactListItem) => void;
   mutate: () => void;
 }) {
@@ -106,6 +111,7 @@ export function CompaniesView({
                 key={group.key}
                 group={group}
                 companies={companies}
+                activeEmail={activeEmail}
                 onSelectContact={onSelectContact}
                 onEdit={
                   group.company ? () => setEditing(group.company) : undefined
@@ -131,12 +137,14 @@ export function CompaniesView({
 function CompanyRow({
   group,
   companies,
+  activeEmail,
   onSelectContact,
   onEdit,
   mutate,
 }: {
   group: ContactGroup;
   companies: CompanySummary[];
+  activeEmail: string | null;
   onSelectContact: (contact: ContactListItem) => void;
   onEdit?: () => void;
   mutate: () => void;
@@ -205,17 +213,23 @@ function CompanyRow({
           </Button>
         )}
         {isVirtualDomain && (
-          <Button
-            variant="outline"
-            size="sm"
-            loading={create.isExecuting}
-            onClick={() =>
-              create.execute({ name: group.name, domains: group.domains })
-            }
-          >
-            <PlusIcon className="mr-1.5 size-3.5" />
-            Save as company
-          </Button>
+          <Tooltip content="Save as company">
+            <Button
+              variant="ghost"
+              size="iconSm"
+              disabled={create.isExecuting}
+              onClick={() =>
+                create.execute({ name: group.name, domains: group.domains })
+              }
+            >
+              <span className="sr-only">Save as company</span>
+              {create.isExecuting ? (
+                <Loader2Icon className="size-4 animate-spin" />
+              ) : (
+                <BookmarkPlusIcon className="size-4" />
+              )}
+            </Button>
+          </Tooltip>
         )}
       </div>
 
@@ -226,7 +240,10 @@ function CompanyRow({
               <button
                 key={contact.email}
                 type="button"
-                className="flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/50"
+                className={cn(
+                  "flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-muted/50",
+                  contact.email === activeEmail && "bg-muted/50",
+                )}
                 onClick={() => onSelectContact(contact)}
               >
                 <ContactAvatar contact={contact} companies={companies} />

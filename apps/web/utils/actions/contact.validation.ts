@@ -22,6 +22,11 @@ export const enrichContactBody = z.object({
 });
 export type EnrichContactBody = z.infer<typeof enrichContactBody>;
 
+export const deleteContactBody = z.object({
+  email: z.string().email(),
+});
+export type DeleteContactBody = z.infer<typeof deleteContactBody>;
+
 export const setGoogleContactsSyncBody = z.object({
   enabled: z.boolean(),
 });

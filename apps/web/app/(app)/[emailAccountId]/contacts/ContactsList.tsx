@@ -13,6 +13,7 @@ import {
   groupContacts,
   resolveContactCompany,
 } from "@/utils/contacts";
+import { cn } from "@/utils";
 import { SearchBar } from "@/components/SearchBar";
 import { LoadingContent } from "@/components/LoadingContent";
 import { Badge } from "@/components/Badge";
@@ -86,75 +87,87 @@ export function ContactsList() {
 
   const isWide = useIsWideScreen();
 
+  // The detail pane is always populated on wide screens: fall back to the
+  // first contact in the current view when nothing is explicitly selected
+  const displayed = selected ?? filteredContacts[0] ?? null;
+  const activeEmail = isWide ? (displayed?.email ?? null) : null;
+
   const companyCount = groups.filter(
     (group) => group.key !== "personal" && group.key !== "other",
   ).length;
 
   return (
-    <div>
-      <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
-        <div>
-          <h1 className="font-display text-3xl leading-8 tracking-tight lg:text-4xl">
-            Contacts
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {data ? (
-              activeGroupName ? (
-                <>
-                  Showing{" "}
-                  <span className="text-foreground">{activeGroupName}</span> ·{" "}
-                  {filteredContacts.length}{" "}
-                  {filteredContacts.length === 1 ? "person" : "people"}
-                </>
+    <div className="flex min-h-0 flex-1 flex-col">
+      <div className="border-b border-border px-4 pb-3 pt-4">
+        <div className="flex flex-wrap items-end gap-x-6 gap-y-2">
+          <div>
+            <h1 className="font-display text-2xl leading-7 tracking-tight lg:text-3xl">
+              Contacts
+            </h1>
+            <p className="mt-0.5 text-sm text-muted-foreground">
+              {data ? (
+                activeGroupName ? (
+                  <>
+                    Showing{" "}
+                    <span className="text-foreground">{activeGroupName}</span> ·{" "}
+                    {filteredContacts.length}{" "}
+                    {filteredContacts.length === 1 ? "person" : "people"}
+                  </>
+                ) : (
+                  <>
+                    {data.contacts.length} people · {companyCount} companies
+                  </>
+                )
               ) : (
-                <>
-                  {data.contacts.length} people · {companyCount} companies
-                </>
-              )
-            ) : (
-              "Everyone you email, built automatically from your mail history."
-            )}
-          </p>
+                "Everyone you email, built automatically from your mail history."
+              )}
+            </p>
+          </div>
+          <SearchBar
+            onSearch={setSearch}
+            placeholder="Search people, companies, titles..."
+            className="w-full min-w-0 flex-1 sm:w-auto sm:max-w-md"
+          />
+          <div className="ml-auto flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowSync(true)}
+            >
+              <RefreshCwIcon className="mr-1.5 size-3.5" />
+              Sync
+            </Button>
+            <Button size="sm" onClick={() => setAdding(true)}>
+              <PlusIcon className="mr-1.5 size-4" />
+              Add contact
+            </Button>
+          </div>
         </div>
-        <SearchBar
-          onSearch={setSearch}
-          placeholder="Search people, companies, titles..."
-          className="w-full min-w-0 flex-1 sm:w-auto sm:max-w-md"
-        />
-        <div className="ml-auto flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setShowSync(true)}>
-            <RefreshCwIcon className="mr-1.5 size-3.5" />
-            Sync
-          </Button>
-          <Button size="sm" onClick={() => setAdding(true)}>
-            <PlusIcon className="mr-1.5 size-4" />
-            Add contact
-          </Button>
-        </div>
-      </div>
 
-      {/* A sidebar group selection speaks for itself; tabs would contradict it */}
-      {!groupKey && (
-        <div className="mt-3 flex flex-wrap items-center gap-2">
-          <Tabs defaultValue="companies" searchParam="view">
-            <TabsList>
-              <TabsTrigger value="companies">Companies</TabsTrigger>
-              <TabsTrigger value="people">People</TabsTrigger>
-            </TabsList>
-          </Tabs>
-          {view === "people" && (
-            <Tabs defaultValue="recent" searchParam="sort">
+        {/* A sidebar group selection speaks for itself; tabs would contradict it */}
+        {!groupKey && (
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <Tabs defaultValue="companies" searchParam="view">
               <TabsList>
-                <TabsTrigger value="recent">Recent</TabsTrigger>
-                <TabsTrigger value="frequent">Most emails</TabsTrigger>
+                <TabsTrigger value="companies">Companies</TabsTrigger>
+                <TabsTrigger value="people">People</TabsTrigger>
               </TabsList>
             </Tabs>
-          )}
-        </div>
-      )}
+            {view === "people" && (
+              <Tabs defaultValue="recent" searchParam="sort">
+                <TabsList>
+                  <TabsTrigger value="recent">Recent</TabsTrigger>
+                  <TabsTrigger value="frequent">Most emails</TabsTrigger>
+                </TabsList>
+              </Tabs>
+            )}
+          </div>
+        )}
+      </div>
 
-      <div className="mt-4 flex items-start gap-6">
-        <div className="min-w-0 flex-1">
+      {/* Each pane scrolls internally, like the mail view */}
+      <div className="flex min-h-0 flex-1">
+        <div className="min-w-0 flex-1 overflow-y-auto p-4">
           <LoadingContent loading={isLoading && !data} error={error}>
             {data &&
               (data.contacts.length || companies.length ? (
@@ -163,6 +176,7 @@ export function ContactsList() {
                     contacts={data.contacts}
                     companies={companies}
                     labelFilter={labelFilter}
+                    activeEmail={activeEmail}
                     onSelectContact={setSelected}
                     mutate={mutate}
                   />
@@ -171,6 +185,7 @@ export function ContactsList() {
                     <PeopleTable
                       contacts={filteredContacts}
                       companies={companies}
+                      activeEmail={activeEmail}
                       onSelect={setSelected}
                     />
                     {data.hasMore && limit < MAX_LIMIT && (
@@ -197,14 +212,21 @@ export function ContactsList() {
         </div>
 
         {/* Persistent detail pane on wide screens (the sheet covers the rest) */}
-        {isWide && selected && (
-          <aside className="w-[400px] shrink-0 rounded-lg border border-border p-5">
-            <ContactDetails
-              key={selected.email}
-              contact={selected}
-              companies={companies}
-              mutateContacts={mutate}
-            />
+        {isWide && (
+          <aside className="w-[400px] shrink-0 overflow-y-auto border-l border-border p-5">
+            {displayed ? (
+              <ContactDetails
+                key={displayed.email}
+                contact={displayed}
+                companies={companies}
+                mutateContacts={mutate}
+                onDeleted={() => setSelectedEmail(null)}
+              />
+            ) : (
+              <p className="py-12 text-center text-sm text-muted-foreground">
+                Select a contact to see their details.
+              </p>
+            )}
           </aside>
         )}
       </div>
@@ -235,10 +257,12 @@ export function ContactsList() {
 function PeopleTable({
   contacts,
   companies,
+  activeEmail,
   onSelect,
 }: {
   contacts: ContactListItem[];
   companies: CompanySummary[];
+  activeEmail: string | null;
   onSelect: (contact: ContactListItem) => void;
 }) {
   return (
@@ -246,7 +270,6 @@ function PeopleTable({
       <TableHeader>
         <TableRow>
           <TableHead>Name</TableHead>
-          <TableHead className="hidden md:table-cell">Email</TableHead>
           <TableHead className="hidden xl:table-cell">Company</TableHead>
           <TableHead className="hidden sm:table-cell text-right">
             Received
@@ -263,6 +286,7 @@ function PeopleTable({
             key={contact.email}
             contact={contact}
             companies={companies}
+            active={contact.email === activeEmail}
             onSelect={() => onSelect(contact)}
           />
         ))}
@@ -274,17 +298,22 @@ function PeopleTable({
 function ContactRow({
   contact,
   companies,
+  active,
   onSelect,
 }: {
   contact: ContactListItem;
   companies: CompanySummary[];
+  active: boolean;
   onSelect: () => void;
 }) {
   const company = resolveContactCompany(contact, companies);
   const groupName = contact.isPersonal ? "Personal" : company?.name;
 
   return (
-    <TableRow className="cursor-pointer" onClick={onSelect}>
+    <TableRow
+      className={cn("cursor-pointer", active && "bg-muted/50")}
+      onClick={onSelect}
+    >
       <TableCell>
         <div className="flex items-center gap-3 min-w-0">
           <ContactAvatar contact={contact} companies={companies} />
@@ -295,19 +324,11 @@ function ContactRow({
                 <StickyNoteIcon className="size-3.5 shrink-0 text-muted-foreground" />
               )}
             </div>
-            <div className="truncate text-sm text-muted-foreground md:hidden">
-              {contact.email}
+            <div className="truncate text-sm text-muted-foreground">
+              {[contact.email, contact.title].filter(Boolean).join(" · ")}
             </div>
-            {(contact.title || groupName) && (
-              <div className="truncate text-sm text-muted-foreground">
-                {[contact.title, groupName].filter(Boolean).join(" · ")}
-              </div>
-            )}
           </div>
         </div>
-      </TableCell>
-      <TableCell className="hidden md:table-cell text-muted-foreground">
-        {contact.email}
       </TableCell>
       <TableCell className="hidden xl:table-cell text-muted-foreground">
         {groupName ?? "—"}

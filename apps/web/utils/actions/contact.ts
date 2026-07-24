@@ -6,6 +6,7 @@ import { after } from "next/server";
 import { z } from "zod";
 import {
   createCompanyBody,
+  deleteContactBody,
   enrichContactBody,
   setCarddavAccessBody,
   setGoogleContactsSyncBody,
@@ -84,6 +85,22 @@ export const updateContactAction = actionClient
       return { contact };
     },
   );
+
+// Removes the saved details for a contact. The person still appears in the
+// list while email history with them exists — only the Contact row goes away.
+// Their Google Contacts entry (if synced) is left untouched on purpose.
+export const deleteContactAction = actionClient
+  .metadata({ name: "deleteContact" })
+  .inputSchema(deleteContactBody)
+  .action(async ({ ctx: { emailAccountId }, parsedInput: { email } }) => {
+    const normalizedEmail = email.trim().toLowerCase();
+
+    await prisma.contact.deleteMany({
+      where: { emailAccountId, email: normalizedEmail },
+    });
+
+    return { deleted: true };
+  });
 
 // Turns Google Contacts two-way sync on/off; enabling kicks off a pull
 export const setGoogleContactsSyncAction = actionClient
