@@ -221,18 +221,77 @@ export function groupContacts({
   });
 }
 
-// Auto domain groups that haven't been added as (or to) a company and
-// haven't been dismissed — the "Suggested" list. Shared by the page, the
-// tab count, and the sidebar so they can't drift apart.
-export function pendingDomainGroups(
-  groups: ContactGroup[],
+// Per-domain aggregates over the full mail history, used by the Suggested
+// view and company stats (already sorted by email volume, automated senders
+// excluded)
+export type DomainStat = {
+  domain: string;
+  people: number;
+  emails: number;
+  received: number;
+  sent: number;
+  lastInteractionAt: Date | null;
+};
+
+// Domains that haven't been added as (or to) a company and haven't been
+// dismissed — the "Suggested" list. Shared by the page, the tab count, and
+// the sidebar so they can't drift apart.
+export function pendingDomainStats(
+  stats: DomainStat[],
+  companies: Pick<CompanySummary, "domains">[],
   ignoredDomains: string[],
-): ContactGroup[] {
-  const ignored = new Set(ignoredDomains);
-  return groups.filter(
-    (group) =>
-      group.key.startsWith("domain:") && !ignored.has(group.domains[0]),
-  );
+): DomainStat[] {
+  const taken = new Set([
+    ...ignoredDomains,
+    ...companies.flatMap((company) => company.domains),
+  ]);
+  return stats.filter((stat) => !taken.has(stat.domain));
+}
+
+// Heuristic for machine mailboxes: suggestions should surface real people,
+// not no-reply addresses, alert streams, or plus-addressed robots. This is a
+// deliberate product guard on address shape, not content.
+const AUTOMATED_LOCAL_PARTS = new Set([
+  "mailer-daemon",
+  "postmaster",
+  "bounce",
+  "bounces",
+  "notification",
+  "notifications",
+  "alert",
+  "alerts",
+  "newsletter",
+  "newsletters",
+  "news",
+  "updates",
+  "digest",
+  "marketing",
+  "billing",
+  "invoice",
+  "invoices",
+  "receipt",
+  "receipts",
+  "statement",
+  "statements",
+  "reminder",
+  "reminders",
+]);
+const NO_REPLY_PATTERN =
+  /no[-._]?repl(y|ies)|do[-._]?not[-._]?reply|dont[-._]?reply|donotreply|unattended|automated/i;
+const AUTOMATED_DOMAIN_LABEL =
+  /alert|notif|no-?reply|donotreply|bounce|mailer|newsletter|marketing|transactional/i;
+
+export function isLikelyAutomatedSender(email: string): boolean {
+  const [localPart = "", domain = ""] = email.toLowerCase().split("@");
+
+  if (NO_REPLY_PATTERN.test(localPart)) return true;
+  // Plus-addressing on inbound senders (invoice+statements@…) is a robot tag
+  if (localPart.includes("+")) return true;
+  if (AUTOMATED_LOCAL_PARTS.has(localPart)) return true;
+
+  // Sending-infrastructure subdomains: costalerts.amazonaws.com, mailer.x.com
+  const labels = domain.split(".").slice(0, -1);
+  return labels.some((label) => AUTOMATED_DOMAIN_LABEL.test(label));
 }
 
 export function domainLogoUrl(domain: string) {

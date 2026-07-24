@@ -6,12 +6,13 @@ import useSWR, { useSWRConfig } from "swr";
 import { formatDistanceToNow } from "date-fns";
 import { PlusIcon, RefreshCwIcon, StickyNoteIcon } from "lucide-react";
 import type { ContactsResponse } from "@/app/api/contacts/route";
+import type { ContactDomainsResponse } from "@/app/api/contacts/domains/route";
 import {
   contactAvatarUrl,
   type CompanySummary,
   type ContactListItem,
   groupContacts,
-  pendingDomainGroups,
+  pendingDomainStats,
   resolveContactCompany,
 } from "@/utils/contacts";
 import { cn } from "@/utils";
@@ -30,6 +31,7 @@ import {
 } from "@/components/ui/table";
 import { ContactDetails, ContactDetailSheet } from "./ContactDetailSheet";
 import { CompaniesView } from "./CompaniesView";
+import { CompanyDetails } from "./CompanyDetails";
 import { DomainSuggestions } from "./DomainSuggestions";
 import { AddContactDialog } from "./AddContactDialog";
 import { SyncSettingsDialog } from "./SyncSettingsDialog";
@@ -40,8 +42,13 @@ const MAX_LIMIT = 500;
 export function ContactsList() {
   const [search, setSearch] = useState("");
   const [limit, setLimit] = useState(DEFAULT_LIMIT);
-  // Track selection by email so the sheet re-reads fresh data after mutations
-  const [selectedEmail, setSelectedEmail] = useState<string | null>(null);
+  // Selection holds the full contact so people outside the current window
+  // (e.g. from Suggested's on-demand member lists) still display; fresh data
+  // is preferred by email lookup after mutations
+  const [selectedContact, setSelectedContact] =
+    useState<ContactListItem | null>(null);
+  // A company selection shows company details in the pane instead
+  const [selectedGroupKey, setSelectedGroupKey] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [showSync, setShowSync] = useState(false);
 
@@ -68,6 +75,11 @@ export function ContactsList() {
     `/api/contacts?${params.toString()}`,
     { keepPreviousData: true },
   );
+  // Full-history per-domain volumes: Suggested list + company stats
+  const { data: domainsData } = useSWR<ContactDomainsResponse>(
+    "/api/contacts/domains",
+  );
+  const domainStats = domainsData?.domains ?? [];
 
   // Mutations refresh every /api/contacts variant — the sidebar GROUPS
   // panel reads its own fixed key, which would otherwise go stale whenever
@@ -119,35 +131,55 @@ export function ContactsList() {
     ? groups.find((group) => group.key === groupKey)?.name
     : activeLabelName;
 
-  const selected = selectedEmail
-    ? (data?.contacts.find((contact) => contact.email === selectedEmail) ??
-      null)
+  // Prefer the fresh row from the current window (mutations re-read it),
+  // fall back to the captured object for out-of-window selections
+  const selected = selectedContact
+    ? (data?.contacts.find(
+        (contact) => contact.email === selectedContact.email,
+      ) ?? selectedContact)
     : null;
-  const setSelected = (contact: ContactListItem) =>
-    setSelectedEmail(contact.email);
+  const setSelected = (contact: ContactListItem) => {
+    setSelectedGroupKey(null);
+    setSelectedContact(contact);
+  };
+  const setSelectedGroup = (key: string) => {
+    setSelectedContact(null);
+    setSelectedGroupKey(key);
+  };
+  const selectedGroup = selectedGroupKey
+    ? (groups.find((group) => group.key === selectedGroupKey) ?? null)
+    : null;
 
   const isWide = useIsWideScreen();
 
   const pendingSuggestions = useMemo(
-    () => pendingDomainGroups(groups, data?.ignoredDomains ?? []),
-    [groups, data?.ignoredDomains],
+    () =>
+      pendingDomainStats(domainStats, companies, data?.ignoredDomains ?? []),
+    [domainStats, companies, data?.ignoredDomains],
   );
 
   // The detail pane is always populated on wide screens: fall back to the
   // first contact actually visible in the current view when nothing is
   // explicitly selected
+  const suggestedDomains = useMemo(
+    () => new Set(pendingSuggestions.map((stat) => stat.domain)),
+    [pendingSuggestions],
+  );
   const fallback =
     view === "suggested"
-      ? (pendingSuggestions[0]?.contacts[0] ?? null)
+      ? (data?.contacts.find((contact) =>
+          suggestedDomains.has(contact.domain),
+        ) ?? null)
       : view === "companies" && !labelFilter
-        ? (groups.find(
-            (group) =>
-              (group.company || group.key === "personal") &&
-              group.contacts.length > 0,
+        ? ((
+            groups.find(
+              (group) => group.company && group.contacts.length > 0,
+            ) ?? groups.find((group) => group.key === "personal")
           )?.contacts[0] ?? null)
         : (filteredContacts[0] ?? null);
   const displayed = selected ?? fallback;
-  const activeEmail = isWide ? (displayed?.email ?? null) : null;
+  const activeEmail =
+    isWide && !selectedGroup ? (displayed?.email ?? null) : null;
 
   const companyCount = companies.length;
   const suggestedCount = pendingSuggestions.length;
@@ -236,14 +268,16 @@ export function ContactsList() {
                     companies={companies}
                     labelFilter={labelFilter}
                     activeEmail={activeEmail}
+                    activeGroupKey={isWide ? selectedGroupKey : null}
                     onSelectContact={setSelected}
+                    onSelectCompany={setSelectedGroup}
                     mutate={mutate}
                   />
                 ) : view === "suggested" ? (
                   <DomainSuggestions
-                    contacts={data.contacts}
-                    companies={companies}
+                    stats={pendingSuggestions}
                     ignoredDomains={data.ignoredDomains}
+                    companies={companies}
                     activeEmail={activeEmail}
                     onSelectContact={setSelected}
                     mutate={mutate}
@@ -284,7 +318,16 @@ export function ContactsList() {
             when the isWide hook resolves after hydration; the content is
             JS-gated so narrow screens never mount it (or its fetches). */}
         <aside className="hidden w-[400px] shrink-0 overflow-y-auto border-l border-border p-5 xl:block">
-          {isWide && displayed ? (
+          {isWide && selectedGroup ? (
+            <CompanyDetails
+              key={selectedGroup.key}
+              group={selectedGroup}
+              companies={companies}
+              domainStats={domainStats}
+              onSelectContact={setSelected}
+              mutateContacts={mutate}
+            />
+          ) : isWide && displayed ? (
             <ContactDetails
               key={displayed.email}
               contact={displayed}
@@ -301,8 +344,14 @@ export function ContactsList() {
 
       <ContactDetailSheet
         contact={isWide ? null : selected}
+        group={isWide ? null : selectedGroup}
         companies={companies}
-        onClose={() => setSelectedEmail(null)}
+        domainStats={domainStats}
+        onClose={() => {
+          setSelectedContact(null);
+          setSelectedGroupKey(null);
+        }}
+        onSelectContact={setSelected}
         mutateContacts={mutate}
       />
       <AddContactDialog
