@@ -540,6 +540,39 @@ export async function updateRule({
   }
 }
 
+// Replaces this rule's cross-rule exclusion set. Only ids that belong to the
+// same email account and aren't the rule itself are linked, so a client can't
+// wire a rule to another account's rules or to itself.
+export async function setRuleExclusions({
+  ruleId,
+  emailAccountId,
+  excludeWhenMatchRuleIds,
+}: {
+  ruleId: string;
+  emailAccountId: string;
+  excludeWhenMatchRuleIds?: string[] | null;
+}) {
+  const requestedIds = (excludeWhenMatchRuleIds ?? []).filter(
+    (id) => id !== ruleId,
+  );
+
+  const validIds = requestedIds.length
+    ? (
+        await prisma.rule.findMany({
+          where: { emailAccountId, id: { in: requestedIds } },
+          select: { id: true },
+        })
+      ).map((rule) => rule.id)
+    : [];
+
+  await prisma.rule.update({
+    where: { id: ruleId, emailAccountId },
+    data: {
+      excludeWhenMatches: { set: validIds.map((id) => ({ id })) },
+    },
+  });
+}
+
 export async function upsertSystemRule({
   name,
   instructions,

@@ -19,6 +19,7 @@ import {
   InboxIcon,
   ZapIcon,
   ChevronRightIcon,
+  ChevronDownIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/Input";
@@ -80,6 +81,15 @@ import { handleRuleAttachmentSourceSave } from "@/utils/attachments/rule";
 import type { AttachmentSourceInput } from "@/utils/attachments/source-schema";
 import type { GetMessagingChannelsResponse } from "@/app/api/user/messaging-channels/route";
 import { usePremium } from "@/hooks/usePremium";
+import { useRules } from "@/hooks/useRules";
+import {
+  DropdownMenu,
+  DropdownMenuCheckboxItem,
+  DropdownMenuContent,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { hasTierAccess } from "@/utils/premium";
 import { UpgradeToPlusButton } from "@/components/UpgradeToPlusButton";
 import { getConnectedRuleNotificationChannels } from "@/utils/messaging/routes";
@@ -659,6 +669,17 @@ export function RuleForm({
                   </AdvancedRow>
                 )}
 
+                <AdvancedRow
+                  title="Except when it also matches"
+                  description="Skip this rule for an email that also matches one of the selected rules."
+                >
+                  <ExcludeWhenMatchesPicker
+                    currentRuleId={rule.id}
+                    value={watch("excludeWhenMatchRuleIds") ?? []}
+                    onChange={(ids) => setValue("excludeWhenMatchRuleIds", ids)}
+                  />
+                </AdvancedRow>
+
                 {rule.id && !rule.systemType && (
                   <AdvancedRow
                     title="Delete rule"
@@ -883,6 +904,70 @@ function AdvancedRow({
       </div>
       {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
     </div>
+  );
+}
+
+function ExcludeWhenMatchesPicker({
+  currentRuleId,
+  value,
+  onChange,
+}: {
+  currentRuleId?: string;
+  value: string[];
+  onChange: (ids: string[]) => void;
+}) {
+  const { data: rules, isLoading } = useRules();
+  // A rule can't exclude itself, and there's nothing to pick from until other
+  // rules exist
+  const otherRules = (rules ?? []).filter((r) => r.id !== currentRuleId);
+  const selectedNames = otherRules
+    .filter((r) => value.includes(r.id))
+    .map((r) => r.name);
+
+  const label =
+    selectedNames.length === 0
+      ? "None"
+      : selectedNames.length === 1
+        ? selectedNames[0]
+        : `${selectedNames.length} rules`;
+
+  const toggle = (id: string) => {
+    onChange(
+      value.includes(id) ? value.filter((v) => v !== id) : [...value, id],
+    );
+  };
+
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={isLoading || otherRules.length === 0}
+        >
+          <span className="max-w-[12rem] truncate">
+            {otherRules.length === 0 ? "No other rules" : label}
+          </span>
+          <ChevronDownIcon className="ml-2 size-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="max-h-72 overflow-y-auto">
+        <DropdownMenuLabel>
+          Skip this rule when it also matches
+        </DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {otherRules.map((r) => (
+          <DropdownMenuCheckboxItem
+            key={r.id}
+            checked={value.includes(r.id)}
+            onCheckedChange={() => toggle(r.id)}
+            onSelect={(e) => e.preventDefault()}
+          >
+            {r.name}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
