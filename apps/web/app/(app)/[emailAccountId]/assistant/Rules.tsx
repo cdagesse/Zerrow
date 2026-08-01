@@ -74,7 +74,7 @@ export function Rules({
   showAddRuleButton?: boolean;
 }) {
   const { data, isLoading, error, mutate } = useRules();
-  const { setOpen } = useSidebar();
+  const { openSidebar } = useSidebar();
   const { setInput } = useChat();
 
   const { userLabels } = useLabels();
@@ -350,10 +350,7 @@ export function Rules({
                                       setInput(
                                         `I'd like to edit the "${rule.name}" rule:\n`,
                                       );
-                                      setOpen((arr) => [
-                                        ...arr,
-                                        "chat-sidebar",
-                                      ]);
+                                      openSidebar("chat-sidebar");
                                     }}
                                   >
                                     <SparklesIcon className="mr-2 size-4" />

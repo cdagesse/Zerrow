@@ -393,11 +393,21 @@ export function RuleForm({
   const actionErrors = useMemo(() => {
     const actionErrors: string[] = [];
     watch("actions")?.forEach((_, index) => {
+      const actionFieldError = formState.errors?.actions?.[index];
+      // A zod superRefine issue on an object field (labelId/url/to are
+      // `{value,name}` objects) can land either directly on the field or
+      // under `.root` depending on whether a sibling sub-field also errored.
+      // Reading only `.root.message` dropped the "select a label" error, so
+      // clicking Create with no label chosen failed with no visible feedback.
+      const fieldError = (field?: {
+        message?: string;
+        root?: { message?: string };
+      }) => field?.message || field?.root?.message;
       const actionError =
-        formState.errors?.actions?.[index]?.url?.root?.message ||
-        formState.errors?.actions?.[index]?.labelId?.root?.message ||
-        formState.errors?.actions?.[index]?.to?.root?.message ||
-        formState.errors?.actions?.[index]?.messagingChannelId?.message;
+        fieldError(actionFieldError?.url) ||
+        fieldError(actionFieldError?.labelId) ||
+        fieldError(actionFieldError?.to) ||
+        actionFieldError?.messagingChannelId?.message;
       if (actionError) actionErrors.push(actionError);
     });
     return actionErrors;
