@@ -1,4 +1,5 @@
 import { type InferUITool, tool } from "ai";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ActionType, LogicalOperator } from "@/generated/prisma/enums";
 import type { Logger } from "@/utils/logger";
@@ -57,7 +58,7 @@ export const updateRuleTool = ({
 }) =>
   tool({
     description:
-      "Update an existing rule after reading the user's current rules. Use this for direct requests to change rule name, enabled state, conditions, or actions; no capabilities lookup is needed before editing an existing rule. This is a patch: include only the fields being changed, and omitted fields are preserved. Use updates.name to rename a rule. Use updates.condition to change conditions; omit condition fields that should stay unchanged, and set a static field to null only when the user explicitly asks to clear it. Do not set aiInstructions to null to preserve instructions; omit it instead. Use clearAiInstructions only when the user explicitly asks to remove semantic instructions. Use DRAFT_EMAIL for draft reply actions; do not use SEND_EMAIL or REPLY when the user asks to draft. Never use this tool to add/remove a sender or domain from an existing category rule; use updateLearnedPatterns for recurring sender/domain includes and excludes instead. Direct requests to change existing rule behavior are already confirmed; do not create a replacement rule for edits. Some action types are managed outside chat (for example messaging-channel notifications) and cannot appear in updates.actions; they are preserved automatically on every edit and are reported back in preservedActionTypes. Never tell the user those actions were removed, and direct them to the rule editor if they want to change them.",
+      "Update an existing rule after reading the user's current rules. Use this for direct requests to change rule name, enabled state, conditions, or actions; no capabilities lookup is needed before editing an existing rule. This is a patch: include only the fields being changed, and omitted fields are preserved. Use updates.name to rename a rule. Use updates.condition to change conditions; omit condition fields that should stay unchanged, and set a static field to null only when the user explicitly asks to clear it. Do not set aiInstructions to null to preserve instructions; omit it instead. Use clearAiInstructions only when the user explicitly asks to remove semantic instructions. Use DRAFT_EMAIL for draft reply actions; do not use SEND_EMAIL or REPLY when the user asks to draft. Never use this tool to add/remove a sender or domain from an existing category rule; use updateLearnedPatterns for recurring sender/domain includes and excludes instead. This tool never writes on its first call: it returns requiresApproval with the change it would make and an approvalToken. Show that change to the user, wait for them to agree, then call again with the same arguments plus the token. Do not create a replacement rule for edits. Some action types are managed outside chat (for example messaging-channel notifications) and cannot appear in updates.actions; they are preserved automatically on every edit and are reported back in preservedActionTypes. Never tell the user those actions were removed, and direct them to the rule editor if they want to change them.",
     inputSchema: z
       .object({
         ruleName: z.string().describe("The exact current name of the rule."),
@@ -87,9 +88,16 @@ export const updateRuleTool = ({
           .refine((updates) => Object.keys(updates).length > 0, {
             message: "At least one update field is required.",
           }),
+        approvalToken: z
+          .string()
+          .trim()
+          .optional()
+          .describe(
+            "Token returned by a previous call to this tool for this exact change. Omit on the first call: the tool will not write, it returns the change it would make plus this token. Show that change to the user in your reply, and only call again with the token once they have agreed to it. Never reuse a token from a different change and never invent one.",
+          ),
       })
       .describe("Patch update for an existing rule."),
-    execute: async ({ ruleName, updates }) => {
+    execute: async ({ ruleName, updates, approvalToken }) => {
       trackRuleToolCall({ tool: "update_rule", email, logger });
       try {
         const readValidationError = validateRuleWasReadRecently({
@@ -240,6 +248,31 @@ export const updateRuleTool = ({
             originalConditions,
             originalActions,
             currentRule,
+          };
+        }
+
+        // Two-step approval. The first call never writes: it returns the
+        // change plus a token derived from it, so the assistant has to surface
+        // the change before it can apply it. A single call cannot mutate a
+        // rule, and a token minted for one change will not unlock another.
+        const expectedToken = buildRuleUpdateApprovalToken({
+          ruleId: rule.id,
+          updates: effectiveUpdates,
+        });
+        if (approvalToken !== expectedToken) {
+          return {
+            success: true,
+            requiresApproval: true as const,
+            approvalToken: expectedToken,
+            ruleId: rule.id,
+            ruleName: rule.name,
+            proposedUpdates: effectiveUpdates,
+            originalName: rule.name,
+            originalEnabled: rule.enabled,
+            originalConditions,
+            originalActions,
+            message:
+              "No change has been made. Describe this change to the user and wait for them to agree, then call updateRule again with the approvalToken.",
           };
         }
 
@@ -683,4 +716,40 @@ function getInexpressibleActionTypes({
         }),
     ),
   ];
+}
+
+/**
+ * Binds an approval to one exact change on one exact rule.
+ *
+ * Derived from the normalized updates rather than the raw input so that two
+ * requests meaning the same thing produce the same token, and any difference
+ * in what would actually be written produces a different one — an approval for
+ * "disable this rule" cannot be replayed to rewrite its actions.
+ */
+function buildRuleUpdateApprovalToken({
+  ruleId,
+  updates,
+}: {
+  ruleId: string;
+  // biome-ignore lint/suspicious/noExplicitAny: normalized patch shape
+  updates: Record<string, any>;
+}) {
+  return createHash("sha256")
+    .update(`${ruleId}:${stableStringify(updates)}`)
+    .digest("hex")
+    .slice(0, 32);
+}
+
+// JSON.stringify is key-order dependent; the same patch must always hash the
+// same way regardless of how the model happened to order the fields.
+// biome-ignore lint/suspicious/noExplicitAny: arbitrary patch values
+function stableStringify(value: any): string {
+  if (value === null || typeof value !== "object") return JSON.stringify(value);
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringify).join(",")}]`;
+  }
+  const keys = Object.keys(value).sort();
+  return `{${keys
+    .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+    .join(",")}}`;
 }
