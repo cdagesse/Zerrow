@@ -296,6 +296,9 @@ export const createRuleBody = z.object({
   conditionalOperator: z
     .enum([LogicalOperator.AND, LogicalOperator.OR])
     .optional(),
+  // Cross-rule exclusion: ids of other rules that suppress this one. When an
+  // email also matches any of them, this rule is skipped for that email.
+  excludeWhenMatchRuleIds: z.array(z.string()).nullish(),
   systemType: zodSystemRule.nullish(),
 });
 export type CreateRuleBody = z.infer<typeof createRuleBody>;

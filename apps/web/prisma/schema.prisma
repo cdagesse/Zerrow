@@ -619,6 +619,14 @@ model Rule {
   toExclude      Boolean @default(false)
   subjectExclude Boolean @default(false)
 
+  // Cross-rule exclusion: when an email also matches any rule in
+  // excludeWhenMatches, this rule is suppressed for that email ("label as
+  // A, unless it also matches X"). The inverse side (excludesRules) is the
+  // set of rules that name this one as an exclusion — kept so Prisma can
+  // cascade-clean the join rows when either rule is deleted.
+  excludeWhenMatches Rule[] @relation("RuleExclusions")
+  excludesRules      Rule[] @relation("RuleExclusions")
+
   systemType SystemType?
 
   promptText String? // natural language for this rule for prompt file. prompt file is combination of these fields

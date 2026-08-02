@@ -38,6 +38,7 @@ import {
   replaceRuleWithResolvedActions,
   setRuleEnabled,
   setRuleExcludeKnownContacts,
+  setRuleExclusions,
   updateRuleInstructions,
   type RuleActionCreateData,
   addActionOwnershipToInput,
@@ -77,6 +78,7 @@ export const createRuleAction = actionClient
         actions,
         conditions: conditionsInput,
         conditionalOperator,
+        excludeWhenMatchRuleIds,
       },
     }) => {
       await assertCanUseDigestsIfNeeded(userId, actions ?? []);
@@ -118,6 +120,12 @@ export const createRuleAction = actionClient
           logger,
         });
 
+        await setRuleExclusions({
+          ruleId: rule.id,
+          emailAccountId,
+          excludeWhenMatchRuleIds,
+        });
+
         return { rule };
       } catch (error) {
         handleRuleError(error, logger);
@@ -138,6 +146,7 @@ export const updateRuleAction = actionClient
         actions,
         conditions: conditionsInput,
         conditionalOperator,
+        excludeWhenMatchRuleIds,
       },
     }) => {
       await assertRuleIsNotOrgManaged({ ruleId: id, emailAccountId });
@@ -180,6 +189,12 @@ export const updateRuleAction = actionClient
             toExclude: conditions.toExclude ?? false,
             subjectExclude: conditions.subjectExclude ?? false,
           },
+        });
+
+        await setRuleExclusions({
+          ruleId: id,
+          emailAccountId,
+          excludeWhenMatchRuleIds,
         });
 
         return { rule };

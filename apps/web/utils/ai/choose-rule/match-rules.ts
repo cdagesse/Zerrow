@@ -504,14 +504,107 @@ async function findPotentialMatchingRules({
     });
   }
 
-  // If we have a learned pattern match, then return all matches and no potential AI matches
-  // Learned patterns are used for efficiency to avoid running AI for every rule
-  return {
+  // Cross-rule exclusion: a rule that names another rule in "exclude when it
+  // also matches" is dropped when that other rule is a confirmed
+  // (deterministic) match for this email. Applied against the static /
+  // learned-pattern matches only — those are known now without an AI call, so
+  // exclusion stays cheap and predictable. A rule excluded by an AI-only rule
+  // is out of scope: there is nothing deterministic to key on.
+  const excluded = await applyCrossRuleExclusions({
+    emailAccountId,
     matches,
     potentialAiMatches: hasLearnedPatternMatch
       ? []
       : filteredPotentialAiMatches,
-    selectionMetadata,
+    logger,
+  });
+
+  return {
+    matches: excluded.matches,
+    potentialAiMatches: excluded.potentialAiMatches,
+    selectionMetadata: {
+      ...selectionMetadata,
+      excludedByOtherRule: excluded.excludedRuleNames,
+    },
+  };
+}
+
+// Drops candidate rules suppressed by a cross-rule exclusion. A candidate R is
+// removed when any rule in R.excludeWhenMatches is a deterministic match
+// (static or learned pattern) for this email. Exclusions are keyed off the
+// matches present BEFORE filtering, so the outcome doesn't depend on which
+// rule is considered first.
+async function applyCrossRuleExclusions({
+  emailAccountId,
+  matches,
+  potentialAiMatches,
+  logger,
+}: {
+  emailAccountId: string;
+  matches: { rule: RuleWithActions; matchReasons: MatchReason[] }[];
+  potentialAiMatches: PotentialAiMatchRule[];
+  logger: Logger;
+}): Promise<{
+  matches: { rule: RuleWithActions; matchReasons: MatchReason[] }[];
+  potentialAiMatches: PotentialAiMatchRule[];
+  excludedRuleNames: string[];
+}> {
+  const candidateIds = [
+    ...matches.map((m) => m.rule.id),
+    ...potentialAiMatches.map((r) => r.id),
+  ];
+  if (!candidateIds.length) {
+    return { matches, potentialAiMatches, excludedRuleNames: [] };
+  }
+
+  // Which of the candidates carry exclusion links, and to whom
+  const exclusionRows =
+    (await prisma.rule.findMany({
+      where: { emailAccountId, id: { in: candidateIds } },
+      select: { id: true, excludeWhenMatches: { select: { id: true } } },
+    })) ?? [];
+  const exclusionsByRuleId = new Map(
+    exclusionRows
+      .filter((row) => row.excludeWhenMatches?.length)
+      .map((row) => [row.id, row.excludeWhenMatches.map((r) => r.id)]),
+  );
+  if (!exclusionsByRuleId.size) {
+    return { matches, potentialAiMatches, excludedRuleNames: [] };
+  }
+
+  // Only deterministic matches trigger an exclusion
+  const deterministicMatchIds = new Set(matches.map((m) => m.rule.id));
+  const isExcluded = (ruleId: string) =>
+    exclusionsByRuleId
+      .get(ruleId)
+      ?.some((excludedId) => deterministicMatchIds.has(excludedId)) ?? false;
+
+  const excludedRuleNames: string[] = [];
+  const keptMatches = matches.filter((m) => {
+    if (isExcluded(m.rule.id)) {
+      excludedRuleNames.push(m.rule.name);
+      return false;
+    }
+    return true;
+  });
+  const keptPotentialAiMatches = potentialAiMatches.filter((rule) => {
+    if (isExcluded(rule.id)) {
+      excludedRuleNames.push(rule.name);
+      return false;
+    }
+    return true;
+  });
+
+  if (excludedRuleNames.length) {
+    logger.info("Rules suppressed by cross-rule exclusion", {
+      excludedRuleNames: joinLogValues(excludedRuleNames),
+    });
+  }
+
+  return {
+    matches: keptMatches,
+    potentialAiMatches: keptPotentialAiMatches,
+    excludedRuleNames,
   };
 }
 
