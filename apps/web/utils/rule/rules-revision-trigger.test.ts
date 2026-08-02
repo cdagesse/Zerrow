@@ -87,7 +87,7 @@ function getRuleScalarColumns(): string[] {
   if (!model) throw new Error("Could not find the Rule model");
 
   const relationTypes =
-    /^(Action|AttachmentSource|EmailAccount|OrganizationRule|ExecutedRule|ClassificationFeedback|Group|RuleHistory)\b/;
+    /^(Action|AttachmentSource|EmailAccount|OrganizationRule|ExecutedRule|ClassificationFeedback|Group|RuleHistory|RuleMisfireReport)\b/;
 
   return model[1]
     .split("\n")
