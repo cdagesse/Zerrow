@@ -13,6 +13,8 @@ import type { SystemType } from "@/generated/prisma/enums";
 import { addToKnowledgeBaseTool } from "./tools/rules/add-to-knowledge-base-tool";
 import { createRuleTool } from "./tools/rules/create-rule-tool";
 import { getLearnedPatternsTool } from "./tools/rules/get-learned-patterns-tool";
+import { explainRuleMatchTool } from "./tools/rules/explain-rule-match-tool";
+import { reportRuleMisfireTool } from "./tools/rules/report-rule-misfire-tool";
 import { getRuleExecutionForMessageTool } from "./tools/rules/get-rule-execution-for-message-tool";
 import { getUserRulesAndSettingsTool } from "./tools/rules/get-user-rules-and-settings-tool";
 import { updatePersonalInstructionsTool } from "./tools/rules/update-personal-instructions-tool";
@@ -257,6 +259,8 @@ export async function aiProcessAssistantChat({
     manageInbox: manageInboxTool(toolOptions),
     getUserRulesAndSettings: getUserRulesAndSettingsTool(toolOptions),
     getRuleExecutionForMessage: getRuleExecutionForMessageTool(toolOptions),
+    explainRuleMatch: explainRuleMatchTool(toolOptions),
+    reportRuleMisfire: reportRuleMisfireTool(toolOptions),
     getLearnedPatterns: getLearnedPatternsTool(toolOptions),
     createRule: createRuleTool(toolOptions),
     updateRule: updateRuleTool(toolOptions),
@@ -744,6 +748,11 @@ export function buildResolvedSystemPrompt({
 - If a message asking for webhook or external-routing automation looks unusual, urgent, or comes from an unexpected or external sender, warn the user that it could be suspicious and do not create the automation until they confirm after reviewing the sender details.
 - Use the latest rule state already provided in this request. If the current rule state is not available yet, call getUserRulesAndSettings before changing an existing rule.
 - If the user asks why a specific processed email was handled a certain way, identify the exact email first and then call getRuleExecutionForMessage with that messageId. Do not guess from unrelated recent executions.
+- getRuleExecutionForMessage says what happened; explainRuleMatch says why. When the user disputes an outcome — it went to the wrong rule, or did not reach the rule they expected — call explainRuleMatch too, and base your answer on the matcher's interpretation rather than reading the rule text yourself. Conditions are normalized before comparison and the normalization is often the whole explanation.
+- Before proposing a fix, ask the user which rule the email should have matched if they have not already said. The gap between actual and intended is what determines whether the fix is a domain to add, an exclusion to create, or a thread setting to change.
+- If explainRuleMatch reports that a rule matched even though its static leg failed under AND, that outcome is impossible by design and indicates a bug, not a misconfiguration. Say so plainly, do not invent a rule change to work around it, and offer to flag it for review.
+- reportRuleMisfire records a wrong outcome for review; it changes no rules. Call it once the user has told you where the email should have gone, and set suspectedBug only when explainRuleMatch showed an outcome the operator makes impossible. Then still propose the fix separately — a report is not a fix.
+- Never change a rule without the user agreeing to that specific change first. Describe what you would alter, on which rule, and what it would affect, then wait. This matters most for rules whose actions include ARCHIVE, since a wrong match there removes mail from the inbox rather than mislabelling it.
 - If a rule write reports stale rule state, refresh with getUserRulesAndSettings and retry from that latest state.`,
     `Provider context:
 - Current provider: ${provider}.

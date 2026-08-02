@@ -243,6 +243,7 @@ model EmailAccount {
   filingFolders          FilingFolder[]
   apiKeys                ApiKey[]
   classificationFeedback ClassificationFeedback[]
+  misfireReports         RuleMisfireReport[]
   contacts               Contact[]
   companies              Company[]
   companyLabels          CompanyLabel[]
@@ -592,6 +593,8 @@ model Rule {
 
   executedRules          ExecutedRule[]
   classificationFeedback ClassificationFeedback[]
+  misfireReportsAsActual   RuleMisfireReport[] @relation("MisfireActualRule")
+  misfireReportsAsExpected RuleMisfireReport[] @relation("MisfireExpectedRule")
 
   // conditions: ai, group, static
   conditionalOperator LogicalOperator @default(AND)
@@ -875,6 +878,55 @@ model ClassificationFeedback {
 
   @@unique([emailAccountId, sender, ruleId, messageId, eventType])
   @@index([ruleId])
+}
+
+/// A user telling us an email was routed wrong, captured from the assistant
+/// chat. Doubles as ground truth for measuring rule accuracy (actual vs
+/// expected) and as the queue for outcomes that look like engine bugs rather
+/// than misconfiguration.
+model RuleMisfireReport {
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  messageId String
+  threadId  String
+  /// Sender and subject at report time, so the report stays readable after
+  /// the message is archived, relabelled, or deleted.
+  sender    String
+  subject   String?
+
+  /// The rule that actually ran. Null when nothing matched.
+  actualRuleId String?
+  actualRule   Rule?   @relation("MisfireActualRule", fields: [actualRuleId], references: [id], onDelete: SetNull)
+  /// Where the user says it should have gone. Null when they only know it was
+  /// wrong, which is still worth recording.
+  expectedRuleId String?
+  expectedRule   Rule?  @relation("MisfireExpectedRule", fields: [expectedRuleId], references: [id], onDelete: SetNull)
+
+  /// The matcher's own explanation at report time. Rules get edited, so a
+  /// later re-evaluation would not reproduce the decision being reported.
+  explanation Json?
+  /// Set when the explanation showed an outcome the operator makes impossible
+  /// — those need an engineer, not a rule change.
+  suspectedBug Boolean          @default(false)
+  status       MisfireReportStatus @default(OPEN)
+  /// Free-text note from whoever triaged it.
+  reviewNote String?
+
+  emailAccountId String
+  emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
+
+  @@unique([emailAccountId, messageId])
+  @@index([status, suspectedBug])
+  @@index([emailAccountId])
+}
+
+enum MisfireReportStatus {
+  OPEN
+  REVIEWING
+  RESOLVED
+  DISMISSED
 }
 
 model Category {

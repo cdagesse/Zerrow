@@ -91,7 +91,7 @@ function getRuleScalarColumns(): string[] {
   // Rule columns, and matching loads them fresh at match time rather than from
   // the rules-revision snapshot — so they don't belong in the trigger.
   const relationTypes =
-    /^(Action|AttachmentSource|EmailAccount|OrganizationRule|ExecutedRule|ClassificationFeedback|Group|RuleHistory|Rule)\b/;
+    /^(Action|AttachmentSource|EmailAccount|OrganizationRule|ExecutedRule|ClassificationFeedback|Group|RuleHistory|RuleMisfireReport|Rule)\b/;
 
   return model[1]
     .split("\n")

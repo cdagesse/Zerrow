@@ -648,7 +648,11 @@ async function findMatchingRulesWithReasons(
       classificationFeedback,
     });
 
-    const aiRules = filterMultipleSystemRules(fullResult.rules);
+    const aiRules = enforceAndStaticGate(
+      filterMultipleSystemRules(fullResult.rules),
+      message,
+      logger,
+    );
 
     return {
       matches: mergeMatchesWithAiResults(matches, aiRules),
@@ -841,4 +845,37 @@ class PreviousThreadRulesLoader {
     }
     return this.ruleIds;
   }
+}
+
+/**
+ * Last line of defence for the AND + static invariant.
+ *
+ * Under AND a rule whose static leg fails must never reach the AI, and the
+ * candidate builder enforces that. Production disagreed: a rule restricted to
+ * internal domains was applied to an external sender, and the recorded reason
+ * showed the model had been offered it. The leak has not been reproduced, and
+ * the invariant is cheap to re-check at the point where a match becomes an
+ * action — so re-check it here rather than trust the path above.
+ *
+ * A drop here is always a bug, never expected pruning, so it logs at error
+ * with the rule and sender needed to find it.
+ */
+function enforceAndStaticGate<
+  T extends { name: string; conditionalOperator: LogicalOperator },
+>(rules: T[], message: ParsedMessage, logger: Logger): T[] {
+  return rules.filter((rule) => {
+    if (rule.conditionalOperator !== LogicalOperator.AND) return true;
+    if (!getConditionTypes(rule as never).STATIC) return true;
+    if (getStaticConditionFailures(rule as never, message, logger).matched) {
+      return true;
+    }
+
+    logger.error("AND static gate leaked a rule past candidate selection", {
+      module: MODULE,
+      ruleName: rule.name,
+      from: message.headers.from,
+      subject: message.headers.subject,
+    });
+    return false;
+  });
 }
