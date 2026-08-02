@@ -193,7 +193,7 @@ describe("CardDAV handler", () => {
       // Contacts that predate CardDAV fall back to their row id
       expect(result.body).toContain("/api/carddav/addressbook/c2.vcf");
       expect(result.body).toContain(
-        `<d:getetag>"g2-${UPDATED_AT.getTime()}"</d:getetag>`,
+        `<d:getetag>"g3-${UPDATED_AT.getTime()}"</d:getetag>`,
       );
     });
 
@@ -213,7 +213,7 @@ describe("CardDAV handler", () => {
       });
 
       expect(result.body).toContain(
-        `<d:getetag>"g2-${UPDATED_AT.getTime()}"</d:getetag>`,
+        `<d:getetag>"g3-${UPDATED_AT.getTime()}"</d:getetag>`,
       );
       expect(result.body).not.toContain("getcontenttype");
     });
@@ -255,7 +255,7 @@ describe("CardDAV handler", () => {
         depth: "0",
       });
 
-      expect(getCtag(result.body)).toMatch(/^"3-/);
+      expect(getCtag(result.body)).toMatch(/^"4-/);
     });
 
     // iOS decides whether the account is editable from the privilege set and
@@ -793,7 +793,7 @@ describe("CardDAV handler", () => {
         "<d:href>/api/carddav/addressbook/uid-1.vcf</d:href>",
       );
       expect(result.body).toContain(
-        `<d:getetag>"g2-${UPDATED_AT.getTime()}"</d:getetag>`,
+        `<d:getetag>"g3-${UPDATED_AT.getTime()}"</d:getetag>`,
       );
       expect(result.body).toContain("text/vcard");
     });
@@ -821,7 +821,7 @@ describe("CardDAV handler", () => {
       expect(result.headers?.["Content-Type"]).toBe(
         "text/vcard; charset=utf-8",
       );
-      expect(result.headers?.ETag).toBe(`"g2-${UPDATED_AT.getTime()}"`);
+      expect(result.headers?.ETag).toBe(`"g3-${UPDATED_AT.getTime()}"`);
       expect(result.body).toContain("BEGIN:VCARD");
     });
 

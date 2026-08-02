@@ -147,7 +147,7 @@ export function parseVCard(raw: string): ParsedVCard {
 // makes every card look modified, which is the only way to unstick a client
 // that recorded item etags during a broken sync — it holds the tags but
 // never stored the cards, so etag comparison forever says "nothing new".
-const ETAG_GENERATION = 2;
+const ETAG_GENERATION = 3;
 
 export function contactEtag(updatedAt: Date): string {
   return `"g${ETAG_GENERATION}-${updatedAt.getTime()}"`;
