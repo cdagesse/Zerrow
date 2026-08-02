@@ -27,6 +27,7 @@ import {
   ChevronDownIcon,
   ChevronRightIcon,
   FileIcon,
+  FlagIcon,
   InboxIcon,
   LayoutDashboardIcon,
   ListIcon,
@@ -322,6 +323,12 @@ function AdminNav({ path }: { path: string }) {
         href: "/admin/errors",
         icon: TriangleAlertIcon,
         active: path.startsWith("/admin/errors"),
+      },
+      {
+        name: "Rule reports",
+        href: "/admin/rule-reports",
+        icon: FlagIcon,
+        active: path.startsWith("/admin/rule-reports"),
       },
       {
         name: "Tools",
