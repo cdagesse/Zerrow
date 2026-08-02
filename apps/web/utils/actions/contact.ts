@@ -553,6 +553,12 @@ export const createCompanyAction = actionClient
             data: { emailAccountId, name: trimmedName, domains: normalized },
           });
 
+      await claimContactsForCompanyDomains({
+        emailAccountId,
+        companyId: company.id,
+        domains: company.domains,
+      });
+
       // Fresh companies get researched in the background: the AI writes the
       // "who they are" summary and fixes the domain-derived name's
       // capitalization/spacing (700credit → 700Credit) while the user moves on
@@ -801,6 +807,15 @@ export const updateCompanyAction = actionClient
           }),
         },
       });
+
+      // Domains can be added on edit, not just at creation.
+      if (normalizedDomains !== undefined) {
+        await claimContactsForCompanyDomains({
+          emailAccountId,
+          companyId: company.id,
+          domains: company.domains,
+        });
+      }
 
       return { company };
     },
@@ -1292,4 +1307,44 @@ function companyNamesEquivalent(a: string, b: string): boolean {
     value.toLowerCase().replace(/[^a-z0-9]/g, "");
   const left = normalize(a);
   return !!left && left === normalize(b);
+}
+
+// A company owns its domains, so contacts at those domains belong to it. The
+// contacts UI already renders that relationship by inferring it at read time
+// (companyOwningDomain), but CardDAV group membership walks the stored
+// companyId — so without writing it, those people are invisible to iOS groups
+// while looking correctly filed on the website.
+//
+// Only claims contacts that are unassigned and not personal, mirroring
+// resolveContactCompany: an explicit assignment is never overwritten.
+async function claimContactsForCompanyDomains({
+  emailAccountId,
+  companyId,
+  domains,
+}: {
+  emailAccountId: string;
+  companyId: string;
+  domains: string[];
+}) {
+  const claimable = domains.filter((domain) => !isPublicEmailDomain(domain));
+  if (!claimable.length) return 0;
+
+  const candidates = await prisma.contact.findMany({
+    where: { emailAccountId, companyId: null, isPersonal: false },
+    select: { id: true, email: true },
+  });
+
+  const ids = candidates
+    .filter(
+      (contact) =>
+        contact.email && claimable.includes(emailDomain(contact.email)),
+    )
+    .map((contact) => contact.id);
+  if (!ids.length) return 0;
+
+  const result = await prisma.contact.updateMany({
+    where: { id: { in: ids }, companyId: null },
+    data: { companyId },
+  });
+  return result.count;
 }
