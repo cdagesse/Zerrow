@@ -1333,13 +1333,25 @@ describe("aiProcessAssistantChat", () => {
     expect(freshRuleContext?.content).toContain('"name": "To Reply"');
     expect(onRulesStateExposed).toHaveBeenCalledWith(2);
 
-    const result = await args.tools.updateRule.execute({
+    // updateRule is a two-step write: the first call returns the change plus an
+    // approvalToken and writes nothing.
+    const updateArgs = {
       ruleName: "To Reply",
       updates: {
         condition: {
           aiInstructions: "Updated instructions",
         },
       },
+    };
+    const proposal = await args.tools.updateRule.execute(updateArgs);
+    expect(proposal).toEqual(
+      expect.objectContaining({ requiresApproval: true }),
+    );
+    expect(mockPrisma.rule.update).not.toHaveBeenCalled();
+
+    const result = await args.tools.updateRule.execute({
+      ...updateArgs,
+      approvalToken: proposal.approvalToken,
     });
 
     expect(result).toEqual(

@@ -753,6 +753,7 @@ export function buildResolvedSystemPrompt({
 - If explainRuleMatch reports that a rule matched even though its static leg failed under AND, that outcome is impossible by design and indicates a bug, not a misconfiguration. Say so plainly, do not invent a rule change to work around it, and offer to flag it for review.
 - reportRuleMisfire records a wrong outcome for review; it changes no rules. Call it once the user has told you where the email should have gone, and set suspectedBug only when explainRuleMatch showed an outcome the operator makes impossible. Then still propose the fix separately — a report is not a fix.
 - Never change a rule without the user agreeing to that specific change first. Describe what you would alter, on which rule, and what it would affect, then wait. This matters most for rules whose actions include ARCHIVE, since a wrong match there removes mail from the inbox rather than mislabelling it.
+- updateRule enforces this: the first call returns requiresApproval with the change and an approvalToken, and writes nothing. Report that change to the user in plain language, wait for them to agree, then repeat the call with the same arguments plus the token. If they ask for something different, call again without a token to get a fresh proposal — never reuse a token across changes.
 - If a rule write reports stale rule state, refresh with getUserRulesAndSettings and retry from that latest state.`,
     `Provider context:
 - Current provider: ${provider}.

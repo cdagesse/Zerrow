@@ -211,7 +211,7 @@ describe("updateRuleTool", () => {
   });
 
   it("preserves omitted static fields when patching one static condition", async () => {
-    const result = await updateRuleTool({
+    const result = await approvingUpdateRuleTool({
       email: "user@example.com",
       emailAccountId: "email-account-id",
       provider: "google",
@@ -275,7 +275,7 @@ describe("updateRuleTool", () => {
       ],
     });
 
-    await updateRuleTool({
+    await approvingUpdateRuleTool({
       email: "user@example.com",
       emailAccountId: "email-account-id",
       provider: "google",
@@ -329,7 +329,7 @@ describe("updateRuleTool", () => {
       actions: [{ type: ActionType.DRAFT_MESSAGING_CHANNEL }],
     });
 
-    await updateRuleTool({
+    await approvingUpdateRuleTool({
       email: "user@example.com",
       emailAccountId: "email-account-id",
       provider: "google",
@@ -366,7 +366,7 @@ describe("updateRuleTool", () => {
       ),
     );
 
-    const result = await updateRuleTool({
+    const result = await approvingUpdateRuleTool({
       email: "user@example.com",
       emailAccountId: "email-account-id",
       provider: "google",
@@ -388,7 +388,7 @@ describe("updateRuleTool", () => {
   });
 
   it("strips copied rule fields from status-only updates before writing", async () => {
-    const result = await updateRuleTool({
+    const result = await approvingUpdateRuleTool({
       email: "user@example.com",
       emailAccountId: "email-account-id",
       provider: "google",
@@ -441,7 +441,7 @@ describe("updateRuleTool", () => {
       vendorBillingRuleWithActions(),
     );
 
-    const result = await updateRuleTool({
+    const result = await approvingUpdateRuleTool({
       email: "user@example.com",
       emailAccountId: "email-account-id",
       provider: "google",
@@ -488,7 +488,7 @@ describe("updateRuleTool", () => {
       vendorBillingRuleWithActions(),
     );
 
-    const result = await updateRuleTool({
+    const result = await approvingUpdateRuleTool({
       email: "user@example.com",
       emailAccountId: "email-account-id",
       provider: "google",
@@ -535,7 +535,7 @@ describe("updateRuleTool", () => {
       vendorBillingRuleWithActions(),
     );
 
-    const result = await updateRuleTool({
+    const result = await approvingUpdateRuleTool({
       email: "user@example.com",
       emailAccountId: "email-account-id",
       provider: "google",
@@ -588,7 +588,7 @@ describe("updateRuleTool", () => {
   });
 
   it("blocks updates after deletion is pending for the same rule", async () => {
-    const result = await updateRuleTool({
+    const result = await approvingUpdateRuleTool({
       email: "user@example.com",
       emailAccountId: "email-account-id",
       provider: "google",
@@ -614,7 +614,7 @@ describe("updateRuleTool", () => {
   });
 
   it("keeps replacement AI instructions when clear flag is also present", async () => {
-    const result = await updateRuleTool({
+    const result = await approvingUpdateRuleTool({
       email: "user@example.com",
       emailAccountId: "email-account-id",
       provider: "google",
@@ -802,4 +802,120 @@ function vendorBillingActionsInput() {
       delayInMinutes: null,
     },
   ];
+}
+
+// updateRule is a two-step write: the first call returns the change plus an
+// approvalToken and writes nothing. These tests assert what gets written, so
+// they take both steps. Tests that reject before the gate pass straight
+// through.
+describe("updateRuleTool approval gate", () => {
+  const options = {
+    email: "user@example.com",
+    emailAccountId: "email-account-id",
+    provider: "google",
+    logger,
+    getRuleReadState: () => ({
+      readAt: Date.now(),
+      rulesRevision: 3,
+      ruleUpdatedAtByName: new Map([
+        ["Vendor Billing", "2026-04-27T00:00:00.000Z"],
+      ]),
+    }),
+  } as Parameters<typeof updateRuleTool>[0];
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPartialUpdateRule.mockResolvedValue({ id: "rule-id" });
+    mockAssistantRuleSnapshot([
+      {
+        name: "Vendor Billing",
+        instructions: "Billing notices.",
+        from: "billing@vendor.example",
+        conditionalOperator: "AND",
+      },
+    ]);
+    mockPrisma.rule.findUnique.mockResolvedValue({
+      id: "rule-id",
+      name: "Vendor Billing",
+      enabled: true,
+      updatedAt: new Date("2026-04-27T00:00:00.000Z"),
+      emailAccount: { rulesRevision: 3 },
+      instructions: "Billing notices.",
+      from: "billing@vendor.example",
+      to: null,
+      subject: null,
+      conditionalOperator: "AND",
+      actions: [],
+    });
+  });
+
+  const disable = { ruleName: "Vendor Billing", updates: { enabled: false } };
+
+  it("writes nothing on the first call and returns the change to show the user", async () => {
+    const result: any = await (updateRuleTool(options) as any).execute(disable);
+
+    expect(result.requiresApproval).toBe(true);
+    expect(result.approvalToken).toEqual(expect.any(String));
+    expect(result.proposedUpdates).toMatchObject({ enabled: false });
+    expect(mockPartialUpdateRule).not.toHaveBeenCalled();
+    expect(mockSetRuleEnabled).not.toHaveBeenCalled();
+  });
+
+  it("applies the change when called again with that token", async () => {
+    const tool: any = updateRuleTool(options);
+    const first: any = await tool.execute(disable);
+    const second: any = await tool.execute({
+      ...disable,
+      approvalToken: first.approvalToken,
+    });
+
+    expect(second.requiresApproval).toBeUndefined();
+    expect(mockSetRuleEnabled).toHaveBeenCalled();
+  });
+
+  it("rejects a token minted for a different change", async () => {
+    const tool: any = updateRuleTool(options);
+    const forDisable: any = await tool.execute(disable);
+
+    // Approval for "disable this rule" must not authorise a rename.
+    const result: any = await tool.execute({
+      ruleName: "Vendor Billing",
+      updates: { name: "Renamed" },
+      approvalToken: forDisable.approvalToken,
+    });
+
+    expect(result.requiresApproval).toBe(true);
+    expect(mockPartialUpdateRule).not.toHaveBeenCalled();
+  });
+
+  it("mints the same token regardless of update key order", async () => {
+    const tool: any = updateRuleTool(options);
+    const a: any = await tool.execute({
+      ruleName: "Vendor Billing",
+      updates: { enabled: false, name: "Renamed" },
+    });
+    const b: any = await tool.execute({
+      ruleName: "Vendor Billing",
+      updates: { name: "Renamed", enabled: false },
+    });
+
+    expect(a.approvalToken).toBe(b.approvalToken);
+  });
+});
+
+function approvingUpdateRuleTool(
+  options: Parameters<typeof updateRuleTool>[0],
+) {
+  const tool = updateRuleTool(options);
+  return {
+    // biome-ignore lint/suspicious/noExplicitAny: mirrors the tool's loose shape
+    execute: async (args: any): Promise<any> => {
+      const first: any = await (tool as any).execute(args);
+      if (!first?.requiresApproval) return first;
+      return (tool as any).execute({
+        ...args,
+        approvalToken: first.approvalToken,
+      });
+    },
+  };
 }
