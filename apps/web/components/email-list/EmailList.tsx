@@ -229,7 +229,7 @@ export function EmailList({
   );
 
   const { setInput } = useChat();
-  const { setOpen: setOpenSidebars } = useSidebar();
+  const { openSidebar } = useSidebar();
   const chatAboutThread = useCallback(
     (thread: Thread) => {
       const message = thread.messages?.at(-1);
@@ -237,13 +237,12 @@ export function EmailList({
       setInput(
         `About the email from ${message.headers.from} with the subject "${message.headers.subject}": `,
       );
-      setOpenSidebars((sidebars) =>
-        sidebars.includes("chat-sidebar")
-          ? sidebars
-          : [...sidebars, "chat-sidebar"],
-      );
+      // openSidebar targets the list that actually renders on this device;
+      // a raw setOpen only opens the desktop panel, so the mobile ⋯-menu
+      // action did nothing on phones
+      openSidebar("chat-sidebar");
     },
-    [setInput, setOpenSidebars],
+    [setInput, openSidebar],
   );
 
   const openedRow = useMemo(

@@ -67,6 +67,9 @@ export type RuleSelectionMetadata = {
     itemType: GroupItemType;
     itemValue: string;
   }[];
+  // Rules dropped because a rule they name in "exclude when it also matches"
+  // was a match for this email
+  excludedByOtherRule?: string[];
 };
 
 /**

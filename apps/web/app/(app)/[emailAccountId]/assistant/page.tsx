@@ -13,18 +13,24 @@ export const maxDuration = 300; // Applies to the actions
 
 export default async function AssistantPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ emailAccountId: string }>;
+  searchParams: Promise<{ onboarding?: string }>;
 }) {
   const { emailAccountId } = await params;
+  const { onboarding } = await searchParams;
   await checkUserOwnsEmailAccount({ emailAccountId });
 
-  // onboarding redirect
+  // onboarding redirect. The redirect target is this same route with
+  // ?onboarding=true, so it must be excluded from the condition — otherwise a
+  // user with no rules and no onboarding cookie redirects to a URL that
+  // redirects to itself, an infinite loop.
   const cookieStore = await cookies();
   const viewedOnboarding =
     cookieStore.get(ASSISTANT_ONBOARDING_COOKIE)?.value === "true";
 
-  if (!viewedOnboarding) {
+  if (!viewedOnboarding && onboarding !== "true") {
     const hasRule = await prisma.rule.findFirst({
       where: { emailAccountId },
       select: { id: true },

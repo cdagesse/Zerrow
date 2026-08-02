@@ -86,8 +86,12 @@ function getRuleScalarColumns(): string[] {
   const model = schema.match(/^model Rule \{([\s\S]*?)^\}/m);
   if (!model) throw new Error("Could not find the Rule model");
 
+  // Rule appears for the self-referential cross-rule exclusion relation
+  // (excludeWhenMatches / excludesRules). Those live in a join table, not as
+  // Rule columns, and matching loads them fresh at match time rather than from
+  // the rules-revision snapshot — so they don't belong in the trigger.
   const relationTypes =
-    /^(Action|AttachmentSource|EmailAccount|OrganizationRule|ExecutedRule|ClassificationFeedback|Group|RuleHistory)\b/;
+    /^(Action|AttachmentSource|EmailAccount|OrganizationRule|ExecutedRule|ClassificationFeedback|Group|RuleHistory|Rule)\b/;
 
   return model[1]
     .split("\n")

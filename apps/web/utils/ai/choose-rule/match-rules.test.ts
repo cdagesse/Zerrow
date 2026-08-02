@@ -45,6 +45,9 @@ vi.mock("@/utils/cold-email/is-cold-email", () => ({
 describe("findMatchingRule", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Cross-rule exclusion lookup: no rule carries exclusions unless a test
+    // says so
+    prisma.rule.findMany.mockResolvedValue([] as never);
   });
 
   it("matches a static rule", async () => {
@@ -67,6 +70,78 @@ describe("findMatchingRule", () => {
     expect(result.matches[0].matchReasons).toEqual([
       { type: ConditionType.STATIC },
     ]);
+  });
+
+  // Cross-rule exclusion: rule A names rule X in "exclude when it also
+  // matches"; when both match the email, A is dropped
+  it("drops a matched rule when a rule it excludes also matches", async () => {
+    const excluder = getRule({
+      id: "ruleA",
+      name: "Broad",
+      from: "test@example.com",
+    });
+    const excluded = getRule({
+      id: "ruleX",
+      name: "Specific",
+      subject: "urgent",
+    });
+
+    // Both match the email deterministically
+    const message = getMessage({
+      headers: getHeaders({ from: "test@example.com", subject: "urgent now" }),
+    });
+
+    // ruleA is configured to be suppressed when ruleX matches
+    prisma.rule.findMany.mockResolvedValue([
+      { id: "ruleA", excludeWhenMatches: [{ id: "ruleX" }] },
+    ] as never);
+
+    const result = await findMatchingRules({
+      rules: [excluder, excluded],
+      message,
+      emailAccount: getEmailAccount(),
+      provider,
+      modelType: "default",
+      logger,
+    });
+
+    const matchedIds = result.matches.map((m) => m.rule.id);
+    expect(matchedIds).toContain("ruleX");
+    expect(matchedIds).not.toContain("ruleA");
+    expect(result.selectionMetadata.excludedByOtherRule).toContain("Broad");
+  });
+
+  it("keeps the rule when the rule it excludes does not match", async () => {
+    const excluder = getRule({
+      id: "ruleA",
+      name: "Broad",
+      from: "test@example.com",
+    });
+    const excluded = getRule({
+      id: "ruleX",
+      name: "Specific",
+      subject: "urgent",
+    });
+
+    // Only ruleA matches (subject doesn't contain "urgent")
+    const message = getMessage({
+      headers: getHeaders({ from: "test@example.com", subject: "hello" }),
+    });
+
+    prisma.rule.findMany.mockResolvedValue([
+      { id: "ruleA", excludeWhenMatches: [{ id: "ruleX" }] },
+    ] as never);
+
+    const result = await findMatchingRules({
+      rules: [excluder, excluded],
+      message,
+      emailAccount: getEmailAccount(),
+      provider,
+      modelType: "default",
+      logger,
+    });
+
+    expect(result.matches.map((m) => m.rule.id)).toContain("ruleA");
   });
 
   it("skips a rule that excludes known contacts when the sender is a contact", async () => {

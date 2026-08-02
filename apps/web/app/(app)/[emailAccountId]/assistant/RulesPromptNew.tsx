@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  type Dispatch,
-  type SetStateAction,
-  useCallback,
-  useState,
-  useRef,
-} from "react";
+import { useCallback, useState, useRef } from "react";
 import { PlusIcon, UserPenIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -81,7 +75,7 @@ function RulesPromptForm({
   const { mutate } = useRules();
   const { userLabels, isLoading: isLoadingLabels } = useLabels();
   const { chat, submitTextMessage } = useChat();
-  const { isMobile, setOpen, setOpenMobile } = useSidebar();
+  const { openSidebar } = useSidebar();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -108,7 +102,7 @@ function RulesPromptForm({
     }
 
     setIsSubmitting(true);
-    openChatSidebar({ isMobile, setOpen, setOpenMobile });
+    openSidebar("chat-sidebar");
 
     let submitted = false;
     try {
@@ -120,14 +114,7 @@ function RulesPromptForm({
     } finally {
       if (!submitted || !onSubmitted) setIsSubmitting(false);
     }
-  }, [
-    chat.status,
-    isMobile,
-    onSubmitted,
-    setOpen,
-    setOpenMobile,
-    submitTextMessage,
-  ]);
+  }, [chat.status, onSubmitted, openSidebar, submitTextMessage]);
 
   const addExamplePrompt = useCallback((example: string) => {
     editorRef.current?.appendText(`\n* ${example.trim()}`);
@@ -221,25 +208,4 @@ function RulesPromptForm({
       />
     </div>
   );
-}
-
-function openChatSidebar({
-  isMobile,
-  setOpen,
-  setOpenMobile,
-}: {
-  isMobile: boolean;
-  setOpen: Dispatch<SetStateAction<string[]>>;
-  setOpenMobile: Dispatch<SetStateAction<string[]>>;
-}) {
-  const openChat = (openSidebars: string[]) =>
-    openSidebars.includes("chat-sidebar")
-      ? openSidebars
-      : [...openSidebars, "chat-sidebar"];
-
-  if (isMobile) {
-    setOpenMobile(openChat);
-  } else {
-    setOpen(openChat);
-  }
 }

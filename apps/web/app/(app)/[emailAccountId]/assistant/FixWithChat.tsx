@@ -53,7 +53,7 @@ export function FixWithChat({
   const [explanation, setExplanation] = useState("");
   const [showExplanation, setShowExplanation] = useState(false);
 
-  const { setOpen } = useSidebar();
+  const { openSidebar } = useSidebar();
   const { setContext } = useChat();
 
   const selectedRuleName = useMemo(() => {
@@ -127,7 +127,7 @@ export function FixWithChat({
     setContext(context);
 
     setInput(input);
-    setOpen((arr) => [...arr, "chat-sidebar"]);
+    openSidebar("chat-sidebar");
     setIsModalOpen(false);
 
     // Reset state

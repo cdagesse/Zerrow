@@ -20,6 +20,7 @@ async function getRule({
     include: {
       actions: true,
       attachmentSources: true,
+      excludeWhenMatches: { select: { id: true } },
     },
   });
 
@@ -27,6 +28,7 @@ async function getRule({
 
   const ruleWithActions = {
     ...rule,
+    excludeWhenMatchRuleIds: rule.excludeWhenMatches.map((r) => r.id),
     actions: rule.actions.map((action) => ({
       ...action,
       labelId: {

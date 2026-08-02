@@ -121,7 +121,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     onFinish: async () => {
       pendingInlineActionsRef.current = null;
       await Promise.all([
-        mutate("/api/user/rules"),
+        // useRules subscribes with the array key ["/api/user/rules", id]
+        // (so SWRProvider can send the email-account header) — a plain
+        // string key here matches nothing and the rules table stays stale
+        // after the assistant creates or edits a rule
+        mutate(["/api/user/rules", emailAccountId]),
         chatId ? mutate(`/api/chats/${chatId}`) : Promise.resolve(),
       ]);
     },
@@ -166,7 +170,11 @@ export function ChatProvider({ children }: { children: React.ReactNode }) {
     previousChatIdRef.current = chatId;
     pendingInlineActionsRef.current = null;
     setInlineActions([]);
-  }, [chatId]);
+    // The fix-a-rule context is tied to the chat it was attached in. A new
+    // chat or a switch to an existing one shows no context chip, but the
+    // stale ref would still ride along on the next message — clear it.
+    setContext(null);
+  }, [chatId, setContext]);
 
   useEffect(() => {
     if (!emailAccountId) return;

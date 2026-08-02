@@ -35,6 +35,11 @@ type SidebarContext = {
   closeMobileSidebar: (name: string) => void;
   isMobile: boolean;
   toggleSidebar: (names: string[]) => void;
+  // Add-only open that targets whichever state actually renders on this
+  // device. Desktop and mobile track separate lists (the mobile panel reads
+  // openMobile), so callers must never write setOpen directly to open a
+  // sidebar — on a phone that updates state nothing renders from.
+  openSidebar: (name: string) => void;
 };
 
 const SidebarContext = React.createContext<SidebarContext | null>(null);
@@ -125,6 +130,19 @@ const SidebarProvider = React.forwardRef<
       );
     }, []);
 
+    const openSidebar = React.useCallback(
+      (name: string) => {
+        const addSidebar = (prev: string[]) =>
+          prev.includes(name) ? prev : [...prev, name];
+        if (isMobile) {
+          setOpenMobile(addSidebar);
+        } else {
+          setOpen(addSidebar);
+        }
+      },
+      [isMobile, setOpen],
+    );
+
     // Adds a keyboard shortcut to toggle the sidebar.
     React.useEffect(() => {
       const handleKeyDown = (event: KeyboardEvent) => {
@@ -156,6 +174,7 @@ const SidebarProvider = React.forwardRef<
         setOpenMobile,
         closeMobileSidebar,
         toggleSidebar,
+        openSidebar,
       }),
       [
         state,
@@ -166,6 +185,7 @@ const SidebarProvider = React.forwardRef<
         setOpenMobile,
         closeMobileSidebar,
         toggleSidebar,
+        openSidebar,
       ],
     );
 
