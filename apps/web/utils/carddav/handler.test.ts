@@ -86,7 +86,7 @@ describe("CardDAV handler", () => {
         "<d:href>/api/carddav/addressbook/</d:href>",
       );
       expect(result.body).toContain("card:addressbook");
-      expect(result.body).toContain("getctag");
+      expect(result.body).toContain("sync-token");
     });
 
     it("keeps the home set listing shallow at depth 0", async () => {
@@ -173,7 +173,7 @@ describe("CardDAV handler", () => {
 
       expect(result.status).toBe(207);
       expect(result.body).toContain("card:addressbook");
-      expect(result.body).toContain("cs:getctag");
+      expect(result.body).toContain("d:sync-token");
       expect(result.body).not.toContain("uid-1.vcf");
     });
 
@@ -239,7 +239,7 @@ describe("CardDAV handler", () => {
         depth: "0",
       });
 
-      expect(getCtag(after.body)).not.toBe(getCtag(before.body));
+      expect(getSyncToken(after.body)).not.toBe(getSyncToken(before.body));
     });
 
     // The generation prefix is the server-side reset switch: bumping it
@@ -255,7 +255,7 @@ describe("CardDAV handler", () => {
         depth: "0",
       });
 
-      expect(getCtag(result.body)).toMatch(/^"4-/);
+      expect(getSyncToken(result.body)).toMatch(/^urn:zerrow:carddav:4-/);
     });
 
     // iOS decides whether the account is editable from the privilege set and
@@ -293,7 +293,7 @@ describe("CardDAV handler", () => {
       expect(result.body).toContain("<d:quota-available-bytes/>");
       expect(result.body).toContain("HTTP/1.1 404 Not Found");
       // Unrequested props stay out of the answer
-      expect(result.body).not.toContain("getctag");
+      expect(result.body).not.toContain("sync-token");
     });
 
     // Modern iOS picks the sync-collection path when the server offers it —
@@ -314,6 +314,37 @@ describe("CardDAV handler", () => {
         /<d:sync-token>urn:zerrow:carddav:[^<]+<\/d:sync-token>/,
       );
       expect(result.body).toContain("card:supported-address-data");
+    });
+
+    // Offered both, Apple's client picks ctag polling, which latches: it
+    // stores the ctag for a partial download and then reports "nothing to do"
+    // forever. Withholding ctag is the only lever that moves it onto the
+    // resumable sync-token path, so an accidental re-add must fail here.
+    it("never offers a ctag, even when asked for one directly", async () => {
+      prisma.contact.findMany.mockResolvedValue([
+        { id: "c1", carddavUid: "uid-1", updatedAt: UPDATED_AT },
+      ] as never);
+
+      const result = await request({
+        method: "PROPFIND",
+        segments: ["addressbook"],
+        depth: "0",
+        body: `<?xml version="1.0" encoding="UTF-8"?>
+<A:propfind xmlns:A="DAV:" xmlns:CS="http://calendarserver.org/ns/">
+  <A:prop>
+    <CS:getctag/>
+    <A:sync-token/>
+  </A:prop>
+</A:propfind>`,
+      });
+
+      expect(result.status).toBe(207);
+      expect(result.body).not.toContain("cs:getctag>");
+      // Asking for it gets the same explicit 404 as any other prop we lack
+      expect(result.body).toContain("HTTP/1.1 404 Not Found");
+      expect(result.body).toMatch(
+        /<d:sync-token>urn:zerrow:carddav:[^<]+<\/d:sync-token>/,
+      );
     });
   });
 
@@ -684,7 +715,7 @@ describe("CardDAV handler", () => {
         depth: "0",
       });
 
-      expect(getCtag(after.body)).not.toBe(getCtag(before.body));
+      expect(getSyncToken(after.body)).not.toBe(getSyncToken(before.body));
     });
 
     // Labels attach to companies, not contacts — a phone-side group edit
@@ -973,6 +1004,6 @@ function vcard({ uid, email, fn }: { uid: string; email: string; fn: string }) {
   ].join("\r\n");
 }
 
-function getCtag(body: string | undefined) {
-  return body?.match(/<cs:getctag[^>]*>([^<]+)</)?.[1];
+function getSyncToken(body: string | undefined) {
+  return body?.match(/<d:sync-token>([^<]+)</)?.[1];
 }

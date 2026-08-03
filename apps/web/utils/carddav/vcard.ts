@@ -143,7 +143,7 @@ export function parseVCard(raw: string): ParsedVCard {
   return result;
 }
 
-// The generation prefix mirrors the handler's CTAG_GENERATION: bumping it
+// The generation prefix mirrors the handler's SYNC_GENERATION: bumping it
 // makes every card look modified, which is the only way to unstick a client
 // that recorded item etags during a broken sync — it holds the tags but
 // never stored the cards, so etag comparison forever says "nothing new".
