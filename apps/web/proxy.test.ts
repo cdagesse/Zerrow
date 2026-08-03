@@ -82,7 +82,7 @@ describe("CardDAV proxy", () => {
     );
 
     expect(response.status).toBe(207);
-    expect(await response.text()).toContain("getctag");
+    expect(await response.text()).toContain("sync-token");
   });
 
   // With skipTrailingSlashRedirect on, the proxy owns the strip-the-slash

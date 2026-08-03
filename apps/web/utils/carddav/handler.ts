@@ -10,21 +10,20 @@ import type { ContactPhone } from "@/utils/contacts";
 
 // A deliberately small CardDAV server: one addressbook per email account,
 // serving the account's saved contacts. Implements the subset iOS/macOS
-// Contacts needs — principal discovery, addressbook PROPFIND with ctag,
-// addressbook-multiget/query REPORTs, and GET/PUT/DELETE per contact.
+// Contacts needs — principal discovery, addressbook PROPFIND, sync-collection
+// and addressbook-multiget/query REPORTs, and GET/PUT/DELETE per contact.
 // Zerrow's company labels are published alongside as Apple group vCards
 // (group-<labelId>.vcf) so they appear as folders in iOS Contacts.
 
 const BASE = "/api/carddav";
 const ADDRESSBOOK_PATH = `${BASE}/addressbook`;
 
-// Prefixed onto the ctag and sync token. Bump when a sync bug shipped and
-// clients may hold a "current" ctag for state they never actually downloaded
-// (see addressbookState).
-const CTAG_GENERATION = 4;
+// Prefixed onto the sync token. Bump when a sync bug shipped and clients may
+// hold a token for state they never actually downloaded (see addressbookState).
+const SYNC_GENERATION = 4;
 
-// RFC 6578 sync tokens must be URIs; the suffix carries the same change
-// material as the ctag so any edit, add, or delete invalidates both.
+// RFC 6578 sync tokens must be URIs; the suffix carries the collection's
+// change material so any edit, add, or delete invalidates the token.
 const SYNC_TOKEN_PREFIX = "urn:zerrow:carddav:";
 
 type DavResponse = {
@@ -170,17 +169,15 @@ function requestedProps(body: string): string[] {
     .filter((name) => name.toLowerCase() !== "prop");
 }
 
-// The addressbook's current change state, shared by the ctag and the sync
-// token so the legacy poll path and the sync-collection path can never
-// disagree about whether something changed. Bumping CTAG_GENERATION
-// invalidates every client's stored copy of both, forcing a full re-download
-// — the escape hatch for clients that recorded a ctag during a broken sync
-// and now believe they're up to date with zero cards.
+// The addressbook's current change state, expressed as the RFC 6578 sync
+// token. Bumping SYNC_GENERATION invalidates every client's stored token,
+// forcing a full re-enumeration — the escape hatch for a client that recorded
+// a token for state it never actually downloaded.
 async function addressbookState(emailAccountId: string) {
   // Labels and companies participate because the group vCards ride on them:
   // renaming a label or pointing a company at a different label touches
   // neither contact row, yet it changes what the phone should display — the
-  // ctag and sync token must move with it.
+  // sync token must move with it.
   const where = { emailAccountId };
   const newestFirst = {
     where,
@@ -204,7 +201,7 @@ async function addressbookState(emailAccountId: string) {
     prisma.company.count({ where }),
   ]);
   const version = [
-    CTAG_GENERATION,
+    SYNC_GENERATION,
     latestContact[0]?.updatedAt.getTime() ?? 0,
     contactCount,
     latestLabel[0]?.updatedAt.getTime() ?? 0,
@@ -212,10 +209,7 @@ async function addressbookState(emailAccountId: string) {
     latestCompany[0]?.updatedAt.getTime() ?? 0,
     companyCount,
   ].join("-");
-  return {
-    ctag: `"${version}"`,
-    syncToken: `${SYNC_TOKEN_PREFIX}${version}`,
-  };
+  return { syncToken: `${SYNC_TOKEN_PREFIX}${version}` };
 }
 
 // The addressbook collection's own PROPFIND response: what the home-set
@@ -224,7 +218,7 @@ async function addressbookCollectionResponse(
   emailAccountId: string,
   requestBody = "",
 ): Promise<string> {
-  const { ctag, syncToken } = await addressbookState(emailAccountId);
+  const { syncToken } = await addressbookState(emailAccountId);
 
   const available: Record<string, string> = {
     resourcetype:
@@ -232,7 +226,13 @@ async function addressbookCollectionResponse(
     displayname: "<d:displayname>Zerrow Contacts</d:displayname>",
     "addressbook-description":
       '<card:addressbook-description xmlns:card="urn:ietf:params:xml:ns:carddav">Contacts synced from Zerrow</card:addressbook-description>',
-    getctag: `<cs:getctag xmlns:cs="http://calendarserver.org/ns/">${escapeXml(ctag)}</cs:getctag>`,
+    // Deliberately no calendarserver getctag. Offered both, Apple's client
+    // picks ctag polling, and that path is all-or-nothing: it stores the ctag
+    // for a download it only partially finished, then every later poll sees an
+    // unchanged ctag and reports "nothing to do" while the addressbook sits
+    // incomplete — observed live, frozen at 269 of 498 contacts. A sync token
+    // is resumable, so a partial sync heals on the next poll instead of
+    // latching. Withholding ctag is what makes the client choose it.
     "sync-token": `<d:sync-token>${escapeXml(syncToken)}</d:sync-token>`,
     "supported-report-set": `<d:supported-report-set>
       <d:supported-report><d:report><d:sync-collection/></d:report></d:supported-report>

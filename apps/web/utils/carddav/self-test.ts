@@ -193,7 +193,7 @@ export async function runCarddavSelfTest({
     (response, text) => {
       if (response.status !== 207)
         return `Expected 207, got ${response.status}`;
-      if (!text.includes("getctag")) {
+      if (!text.includes("sync-token")) {
         return `207 body did not arrive intact (${text.length} bytes)`;
       }
       return null;
@@ -211,7 +211,7 @@ export async function runCarddavSelfTest({
     (response, text) => {
       if (response.status !== 207)
         return `Expected 207, got ${response.status}`;
-      if (!text.includes("getctag")) {
+      if (!text.includes("sync-token")) {
         return `207 body did not arrive intact (${text.length} bytes)`;
       }
       if (extractCardHrefs(text).length === 0) {
