@@ -114,6 +114,23 @@ export async function proxy(request: NextRequest) {
   });
   logger.trace("CardDAV request body", { requestBody: body });
 
+  // Apple's client enumerates the home set, receives the addressbook, and then
+  // asks for nothing — so which property it rejects is the whole question, and
+  // only the bodies answer it. Discovery bodies carry property names and hrefs,
+  // never contact data, so they are safe above trace.
+  if (
+    method === "PROPFIND" &&
+    (segments.length === 0 || segments[0] === "principal")
+  ) {
+    logger.info("CardDAV discovery bodies", {
+      path: segments.join("/") || "(root)",
+      depth: request.headers.get("depth") ?? null,
+      userAgent: request.headers.get("user-agent"),
+      requestBody: body,
+      responseBody: result.body ?? null,
+    });
+  }
+
   // The same line, journaled where the sync settings panel can show it —
   // awaited so serverless teardown can't drop it
   await recordCarddavExchange({
