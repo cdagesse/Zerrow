@@ -16,6 +16,7 @@ import {
   XIcon,
 } from "lucide-react";
 import type { TasksResponse } from "@/app/api/tasks/route";
+import type { TaskEmailsResponse } from "@/app/api/tasks/[taskId]/route";
 import type { MessagesResponse } from "@/app/api/messages/route";
 import type { ContactsResponse } from "@/app/api/contacts/route";
 import type { UpdateTaskBody } from "@/utils/actions/task.validation";
@@ -55,10 +56,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
+import { LoadingContent } from "@/components/LoadingContent";
 import { AssigneeAutocomplete } from "./AssigneeAutocomplete";
 import { toDatetimeLocal } from "./datetime";
 
 type TaskItem = TasksResponse["tasks"][number];
+
+type TaskEmail = TaskEmailsResponse["emails"][number];
 
 type DrawerTab = "details" | "assignee" | "ai" | "emails" | "attachments";
 
@@ -164,8 +168,23 @@ export function TaskDrawer({
     ? tasks.find((candidate) => candidate.id === task.parentId)
     : undefined;
   const subtasks = tasks.filter((candidate) => candidate.parentId === task.id);
-  const emails = task.emails ?? [];
   const canFollowUp = !!assignee.trim();
+
+  // The drawer mounts when a task opens, so this fetches on open. The list
+  // response only carries a count, keeping its own payload bounded.
+  const {
+    data: emailData,
+    isLoading: emailsLoading,
+    error: emailsError,
+    mutate: mutateEmails,
+  } = useSWR<TaskEmailsResponse>(`/api/tasks/${task.id}`);
+  const emails = emailData?.emails ?? [];
+
+  // Linking or unlinking mail changes both this list and the row's count
+  const refreshEmails = () => {
+    mutateEmails();
+    mutate();
+  };
 
   const saveAssignee = (value: string) => {
     setAssignee(value);
@@ -178,17 +197,20 @@ export function TaskDrawer({
     }
   };
 
+  // Attachment metadata only exists on the fetched emails, so this count fills
+  // in once they land; the email count comes from the list and is there at once
   const attachmentCount = emails.reduce(
     (count, email) => count + taskEmailAttachments(email).length,
     0,
   );
+  const emailCount = task._count.emails;
   const tabs: { key: DrawerTab; name: string }[] = [
     { key: "details", name: "Details" },
     { key: "assignee", name: "Assignee" },
     { key: "ai", name: "AI" },
     {
       key: "emails",
-      name: emails.length ? `Emails (${emails.length})` : "Emails",
+      name: emailCount ? `Emails (${emailCount})` : "Emails",
     },
     {
       key: "attachments",
@@ -582,10 +604,23 @@ export function TaskDrawer({
           )}
 
           {tab === "emails" && (
-            <EmailsTab task={task} open={open} mutate={mutate} />
+            <EmailsTab
+              task={task}
+              emails={emails}
+              emailsLoading={emailsLoading}
+              emailsError={emailsError}
+              open={open}
+              mutate={refreshEmails}
+            />
           )}
 
-          {tab === "attachments" && <AttachmentsTab task={task} />}
+          {tab === "attachments" && (
+            <AttachmentsTab
+              emails={emails}
+              emailsLoading={emailsLoading}
+              emailsError={emailsError}
+            />
+          )}
         </div>
       </div>
     </>
@@ -912,16 +947,21 @@ function AiTab({
 
 function EmailsTab({
   task,
+  emails,
+  emailsLoading,
+  emailsError,
   open,
   mutate,
 }: {
   task: TaskItem;
+  emails: TaskEmail[];
+  emailsLoading: boolean;
+  emailsError?: React.ComponentProps<typeof LoadingContent>["error"];
   open: boolean;
   mutate: () => void;
 }) {
   const { emailAccountId } = useAccount();
   const [pickerOpen, setPickerOpen] = useState(false);
-  const emails = task.emails ?? [];
 
   const { data: recent, isLoading } = useSWR<MessagesResponse>(
     pickerOpen ? "/api/messages" : null,
@@ -963,57 +1003,59 @@ function EmailsTab({
           </p>
         </div>
       )}
-      {emails.map((email) => (
-        <div
-          key={email.id}
-          className="flex gap-2.5 rounded-lg border border-border bg-card px-3.5 py-3"
-        >
-          <SenderAvatar name={email.from} className="size-[30px]" />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-baseline gap-2">
-              <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
-                {email.from}
-              </span>
-              {taskEmailAttachments(email).length > 0 && (
-                <span
-                  title="Has attachments — see the Attachments tab"
-                  className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground"
-                >
-                  <PaperclipIcon className="size-3" />
-                  {taskEmailAttachments(email).length}
-                </span>
-              )}
-              {email.receivedAt && (
-                <span className="shrink-0 whitespace-nowrap text-[11.5px] text-muted-foreground">
-                  {formatRelativeShort(email.receivedAt)}
-                </span>
-              )}
-            </div>
-            <div className="truncate text-[13px] font-medium text-foreground/85">
-              {email.subject}
-            </div>
-            {email.snippet && (
-              <div className="truncate text-[12.5px] text-muted-foreground">
-                {email.snippet}
-              </div>
-            )}
-          </div>
-          <button
-            type="button"
-            aria-label="Unlink email"
-            className="flex size-6 shrink-0 items-center justify-center self-start rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-            onClick={() => unlink.execute({ id: email.id })}
+      <LoadingContent loading={emailsLoading} error={emailsError}>
+        {emails.map((email) => (
+          <div
+            key={email.id}
+            className="flex gap-2.5 rounded-lg border border-border bg-card px-3.5 py-3"
           >
-            <XIcon className="size-3.5" />
-          </button>
-        </div>
-      ))}
-      {!emails.length && (
-        <p className="py-4 text-center text-[13px] text-muted-foreground">
-          No emails linked yet. You can also right-click any email in Mail and
-          choose "Add to task".
-        </p>
-      )}
+            <SenderAvatar name={email.from} className="size-[30px]" />
+            <div className="min-w-0 flex-1">
+              <div className="flex items-baseline gap-2">
+                <span className="min-w-0 flex-1 truncate text-[13px] font-semibold">
+                  {email.from}
+                </span>
+                {taskEmailAttachments(email).length > 0 && (
+                  <span
+                    title="Has attachments — see the Attachments tab"
+                    className="inline-flex shrink-0 items-center gap-0.5 text-[11px] text-muted-foreground"
+                  >
+                    <PaperclipIcon className="size-3" />
+                    {taskEmailAttachments(email).length}
+                  </span>
+                )}
+                {email.receivedAt && (
+                  <span className="shrink-0 whitespace-nowrap text-[11.5px] text-muted-foreground">
+                    {formatRelativeShort(email.receivedAt)}
+                  </span>
+                )}
+              </div>
+              <div className="truncate text-[13px] font-medium text-foreground/85">
+                {email.subject}
+              </div>
+              {email.snippet && (
+                <div className="truncate text-[12.5px] text-muted-foreground">
+                  {email.snippet}
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              aria-label="Unlink email"
+              className="flex size-6 shrink-0 items-center justify-center self-start rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
+              onClick={() => unlink.execute({ id: email.id })}
+            >
+              <XIcon className="size-3.5" />
+            </button>
+          </div>
+        ))}
+        {!emails.length && (
+          <p className="py-4 text-center text-[13px] text-muted-foreground">
+            No emails linked yet. You can also right-click any email in Mail and
+            choose "Add to task".
+          </p>
+        )}
+      </LoadingContent>
       {open && !pickerOpen && (
         <button
           type="button"
@@ -1084,8 +1126,16 @@ function EmailsTab({
 
 // Attachments across every linked email, downloadable via the same
 // endpoint the mail view uses
-function AttachmentsTab({ task }: { task: TaskItem }) {
-  const rows = (task.emails ?? []).flatMap((email) =>
+function AttachmentsTab({
+  emails,
+  emailsLoading,
+  emailsError,
+}: {
+  emails: TaskEmail[];
+  emailsLoading: boolean;
+  emailsError?: React.ComponentProps<typeof LoadingContent>["error"];
+}) {
+  const rows = emails.flatMap((email) =>
     taskEmailAttachments(email).map((attachment) => ({ email, attachment })),
   );
 
@@ -1095,48 +1145,50 @@ function AttachmentsTab({ task }: { task: TaskItem }) {
         Files attached to this task's linked emails — including assignee replies
         the AI reads in.
       </p>
-      {rows.map(({ email, attachment }) => {
-        const searchParams = new URLSearchParams({
-          messageId: email.messageId,
-          attachmentId: attachment.attachmentId,
-          mimeType: attachment.mimeType,
-          filename: attachment.filename,
-        });
-        return (
-          <div
-            key={`${email.messageId}:${attachment.attachmentId}`}
-            className="flex items-center gap-3 rounded-lg border border-border bg-card px-3.5 py-3"
-          >
-            <PaperclipIcon className="size-4 shrink-0 text-muted-foreground" />
-            <div className="min-w-0 flex-1">
-              <div className="truncate text-[13px] font-medium">
-                {attachment.filename}
+      <LoadingContent loading={emailsLoading} error={emailsError}>
+        {rows.map(({ email, attachment }) => {
+          const searchParams = new URLSearchParams({
+            messageId: email.messageId,
+            attachmentId: attachment.attachmentId,
+            mimeType: attachment.mimeType,
+            filename: attachment.filename,
+          });
+          return (
+            <div
+              key={`${email.messageId}:${attachment.attachmentId}`}
+              className="flex items-center gap-3 rounded-lg border border-border bg-card px-3.5 py-3"
+            >
+              <PaperclipIcon className="size-4 shrink-0 text-muted-foreground" />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[13px] font-medium">
+                  {attachment.filename}
+                </div>
+                <div className="truncate text-[11.5px] text-muted-foreground">
+                  {[
+                    formatAttachmentSize(attachment.size),
+                    email.from,
+                    email.receivedAt
+                      ? formatRelativeShort(email.receivedAt)
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
               </div>
-              <div className="truncate text-[11.5px] text-muted-foreground">
-                {[
-                  formatAttachmentSize(attachment.size),
-                  email.from,
-                  email.receivedAt
-                    ? formatRelativeShort(email.receivedAt)
-                    : null,
-                ]
-                  .filter(Boolean)
-                  .join(" · ")}
-              </div>
+              <AttachmentDownloadButton
+                url={`/api/messages/attachment?${searchParams.toString()}`}
+                filename={attachment.filename}
+              />
             </div>
-            <AttachmentDownloadButton
-              url={`/api/messages/attachment?${searchParams.toString()}`}
-              filename={attachment.filename}
-            />
-          </div>
-        );
-      })}
-      {!rows.length && (
-        <p className="py-4 text-center text-[13px] text-muted-foreground">
-          No attachments yet. Files on emails you link — or that assignees reply
-          with — show up here.
-        </p>
-      )}
+          );
+        })}
+        {!rows.length && (
+          <p className="py-4 text-center text-[13px] text-muted-foreground">
+            No attachments yet. Files on emails you link — or that assignees
+            reply with — show up here.
+          </p>
+        )}
+      </LoadingContent>
     </>
   );
 }
