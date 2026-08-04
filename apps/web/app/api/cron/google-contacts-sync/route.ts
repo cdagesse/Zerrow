@@ -9,6 +9,10 @@ import prisma from "@/utils/prisma";
 
 export const maxDuration = 300;
 
+// One run's ceiling. At concurrency 3 this is 20 sequential batches, which
+// leaves headroom under maxDuration; the rest wait for the next hourly pass.
+const BATCH_SIZE = 60;
+
 export const GET = withError("cron/google-contacts-sync", async (request) => {
   if (!hasCronSecret(request)) {
     captureException(
@@ -39,6 +43,11 @@ async function runSync(request: RequestWithLogger) {
       account: { provider: "google" },
     },
     select: { id: true, email: true },
+    // Least-recently-synced first, bounded to what one invocation can finish.
+    // Restarting from the same first account every hour would starve every
+    // account past the timeout; this rotates through them instead.
+    orderBy: { googleContactsSyncedAt: { sort: "asc", nulls: "first" } },
+    take: BATCH_SIZE,
   });
 
   const results = await runWithBoundedConcurrency({
