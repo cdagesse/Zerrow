@@ -139,6 +139,35 @@ export type ConfirmAssistantCreateRuleBody = z.infer<
   typeof confirmAssistantCreateRuleBody
 >;
 
+// The proposed patch is carried so the card can show what would change. It is
+// display only: the confirmation re-reads the tool input the server persisted
+// rather than trusting anything the client sends back.
+export const pendingUpdateRuleToolOutputSchema = z.object({
+  success: z.literal(true),
+  actionType: z.literal("update_rule"),
+  requiresConfirmation: z.literal(true),
+  confirmationState: z.enum(["pending", "processing", "confirmed"]),
+  confirmationProcessingAt: z.string().optional(),
+  ruleId: z.string().trim().min(1),
+  ruleName: z.string().trim().min(1),
+  confirmationResult: z
+    .object({
+      ruleId: z.string().trim().min(1),
+      updatedName: z.string().trim().min(1),
+      confirmedAt: z.string().min(1),
+      alreadyApplied: z.boolean().optional(),
+    })
+    .optional(),
+});
+export type PendingUpdateRuleToolOutput = z.infer<
+  typeof pendingUpdateRuleToolOutputSchema
+>;
+
+export const confirmAssistantUpdateRuleBody = confirmAssistantActionBaseBody;
+export type ConfirmAssistantUpdateRuleBody = z.infer<
+  typeof confirmAssistantUpdateRuleBody
+>;
+
 export const pendingSaveMemoryToolOutputSchema = z.object({
   success: z.literal(true),
   actionType: z.literal("save_memory"),

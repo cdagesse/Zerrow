@@ -50,6 +50,7 @@ import {
   confirmAssistantCreateRule,
   confirmAssistantEmailAction,
   confirmAssistantSaveMemory,
+  confirmAssistantUpdateRule,
 } from "@/utils/actions/assistant-chat";
 import { deleteRuleAction, toggleRuleAction } from "@/utils/actions/rule";
 import { useAction } from "next-safe-action/hooks";
@@ -1487,6 +1488,161 @@ export function UpdatedRuleState({
           <FieldLabel>Status</FieldLabel>
           <Badge color={enabled ? "green" : "gray"}>{label}</Badge>
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/**
+ * A rule edit the assistant proposed. The update_rule tool never writes, so
+ * nothing changes until Approve is pressed here — this card is the only thing
+ * standing between a suggestion and a changed rule.
+ */
+export function PendingUpdateRuleToolCard({
+  args,
+  output,
+  chatMessageId,
+  toolCallId,
+  disableConfirm,
+}: {
+  args: UpdateRuleTool["input"];
+  output: UpdateRuleOutput;
+  chatMessageId: string;
+  toolCallId: string;
+  disableConfirm: boolean;
+}) {
+  const { emailAccountId } = useAccount();
+  const { chatId } = useChat();
+  const [isApproving, setIsApproving] = useState(false);
+  const [appliedName, setAppliedName] = useState<string | null>(
+    output.confirmationResult?.updatedName ?? null,
+  );
+
+  const applied = appliedName !== null;
+  const proposed = output.proposedUpdates ?? {};
+  const ruleId = output.ruleId;
+  const ruleName = output.ruleName || args.ruleName;
+  const isProcessing = output.confirmationState === "processing";
+
+  const nameChange = proposed.name &&
+    proposed.name !== ruleName && { from: ruleName, to: proposed.name };
+  const enabledChange =
+    proposed.enabled !== undefined &&
+    proposed.enabled !== output.originalEnabled
+      ? proposed.enabled
+      : undefined;
+  const conditionText = proposed.condition
+    ? buildConditionText(
+        mergeUpdatedConditionsForDisplay({
+          originalConditions: output.originalConditions,
+          updatedConditions: proposed.condition,
+        }),
+      )
+    : null;
+
+  const handleApprove = async () => {
+    if (!chatId) {
+      toastError({ description: "Could not update this rule." });
+      return;
+    }
+
+    setIsApproving(true);
+    try {
+      const result = await confirmAssistantUpdateRule(emailAccountId, {
+        chatId,
+        chatMessageId,
+        toolCallId,
+      });
+
+      if (result?.serverError) {
+        toastError({ description: result.serverError });
+        return;
+      }
+
+      const confirmation = result?.data?.confirmationResult;
+      if (!confirmation) {
+        toastError({ description: "Could not update this rule." });
+        return;
+      }
+
+      setAppliedName(confirmation.updatedName);
+      toastSuccess({
+        description: confirmation.alreadyApplied
+          ? "The rule already matched this change."
+          : "Rule updated.",
+      });
+    } catch {
+      toastError({ description: "Could not update this rule." });
+    } finally {
+      setIsApproving(false);
+    }
+  };
+
+  return (
+    <Card>
+      <RuleSummaryCardHeader
+        title={appliedName || nameChange?.to || ruleName}
+        status={
+          <RuleStatusBadge
+            label={applied ? "Updated" : "Needs approval"}
+            color={applied ? "blue" : "yellow"}
+          />
+        }
+        actions={ruleId ? <RuleActions ruleId={ruleId} /> : null}
+      />
+
+      <CardContent className="space-y-3 px-4 py-3.5">
+        {nameChange && (
+          <div className="flex gap-4 text-sm">
+            <FieldLabel className="pt-0.5">Name</FieldLabel>
+            <RuleSummaryText>
+              {nameChange.from} → {nameChange.to}
+            </RuleSummaryText>
+          </div>
+        )}
+
+        {conditionText && (
+          <div className="flex gap-4 text-sm">
+            <FieldLabel className="pt-0.5">When</FieldLabel>
+            <RuleSummaryText>{conditionText}</RuleSummaryText>
+          </div>
+        )}
+
+        {proposed.actions && proposed.actions.length > 0 && (
+          <div className="flex gap-4 text-sm">
+            <FieldLabel className="pt-0.5">Then</FieldLabel>
+            <ActionBadgeList actions={proposed.actions} />
+          </div>
+        )}
+
+        {enabledChange !== undefined && (
+          <div className="flex gap-4 text-sm">
+            <FieldLabel className="pt-0.5">Status</FieldLabel>
+            <RuleSummaryText>
+              {enabledChange ? "Enable this rule" : "Pause this rule"}
+            </RuleSummaryText>
+          </div>
+        )}
+
+        {!applied && (
+          <div className="flex justify-end">
+            <Button
+              size="sm"
+              onClick={handleApprove}
+              disabled={disableConfirm || isApproving || isProcessing}
+              className="gap-2"
+            >
+              {isApproving ? (
+                <>
+                  <Loader2 className="size-4 animate-spin" />
+                  Applying...
+                </>
+              ) : (
+                "Approve change"
+              )}
+            </Button>
+          </div>
+        )}
       </CardContent>
     </Card>
   );

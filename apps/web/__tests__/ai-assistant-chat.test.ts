@@ -1333,44 +1333,29 @@ describe("aiProcessAssistantChat", () => {
     expect(freshRuleContext?.content).toContain('"name": "To Reply"');
     expect(onRulesStateExposed).toHaveBeenCalledWith(2);
 
-    // updateRule is a two-step write: the first call returns the change plus an
-    // approvalToken and writes nothing.
-    const updateArgs = {
+    // updateRule never writes: it proposes, and the user approves the change on
+    // a card. Applying it is covered in chat-rule-tools.test.ts.
+    const proposal = await args.tools.updateRule.execute({
       ruleName: "To Reply",
       updates: {
         condition: {
           aiInstructions: "Updated instructions",
         },
       },
-    };
-    const proposal = await args.tools.updateRule.execute(updateArgs);
-    expect(proposal).toEqual(
-      expect.objectContaining({ requiresApproval: true }),
-    );
-    expect(mockPrisma.rule.update).not.toHaveBeenCalled();
-
-    const result = await args.tools.updateRule.execute({
-      ...updateArgs,
-      approvalToken: proposal.approvalToken,
     });
 
-    expect(result).toEqual(
+    expect(proposal).toEqual(
       expect.objectContaining({
         success: true,
+        requiresConfirmation: true,
+        actionType: "update_rule",
         ruleId: "rule-1",
+        proposedUpdates: {
+          condition: { aiInstructions: "Updated instructions" },
+        },
       }),
     );
-    expect(mockPrisma.rule.update).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          id: "rule-1",
-          emailAccountId: "email-account-id",
-        }),
-        data: expect.objectContaining({
-          instructions: "Updated instructions",
-        }),
-      }),
-    );
+    expect(mockPrisma.rule.update).not.toHaveBeenCalled();
   });
 
   it("hydrates rule read state without reinjecting rules when the revision is unchanged", async () => {
