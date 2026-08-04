@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ButtonLoader } from "@/components/Loading";
+import { useQueueState } from "@/store/archive-queue";
 
 // Floating bar that appears at the bottom of the mail list while rows are
 // selected — the one home for every bulk action.
@@ -29,6 +30,17 @@ export function BulkActionBar({
   onDelete: () => void;
   onClear: () => void;
 }) {
+  const { activeThreads } = useQueueState();
+  // Archive and Delete only enqueue work and return, and the selection isn't
+  // cleared until the queue reports back. Without waiting on the queue a second
+  // click enqueues the same action twice, or an Archive and then a Delete for
+  // the same threads. Queue keys are `${actionType}-${threadId}`; mark-read runs
+  // on every thread the user opens and can't conflict, so it doesn't block.
+  const hasQueuedThreadAction = Object.keys(activeThreads || {}).some(
+    (key) => key.startsWith("archive-") || key.startsWith("delete-"),
+  );
+  const isBusy = isProcessing || hasQueuedThreadAction;
+
   return (
     <div className="pointer-events-none fixed inset-x-0 bottom-4 z-40 flex justify-center px-4">
       <div className="pointer-events-auto flex max-w-full flex-wrap items-center justify-center gap-1 rounded-xl bg-primary px-3 py-2 text-primary-foreground shadow-2xl">
@@ -37,7 +49,7 @@ export function BulkActionBar({
         </span>
         <BarButton
           onClick={onProcessAi}
-          disabled={isProcessing}
+          disabled={isBusy}
           label={isProcessing ? "Processing…" : "Process with AI"}
         >
           {isProcessing ? (
@@ -48,17 +60,19 @@ export function BulkActionBar({
         </BarButton>
         <BarButton
           onClick={onMoveToFolder}
-          disabled={isProcessing}
+          disabled={isBusy}
           label="Move to folder & train"
         >
           <FolderInputIcon className="size-4 sm:mr-1.5" />
         </BarButton>
-        <BarButton onClick={onArchive} disabled={isProcessing} label="Archive">
+        <BarButton onClick={onArchive} disabled={isBusy} label="Archive">
           <ArchiveIcon className="size-4 sm:mr-1.5" />
         </BarButton>
-        <BarButton onClick={onDelete} disabled={isProcessing} label="Delete">
+        <BarButton onClick={onDelete} disabled={isBusy} label="Delete">
           <Trash2Icon className="size-4 sm:mr-1.5" />
         </BarButton>
+        {/* Clearing only drops the local selection, so it stays available
+            while queued archive/delete work finishes */}
         <Button
           size="icon"
           variant="ghost"

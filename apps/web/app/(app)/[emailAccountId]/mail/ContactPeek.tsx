@@ -52,11 +52,16 @@ function ContactPeekSheet({
     },
   );
 
+  // The API suppresses ignored addresses from the list, so the fallback below
+  // would otherwise hand back a fresh card for one and let it be re-saved
+  const isIgnored = !!normalized && !!data?.ignoredEmails.includes(normalized);
+
   // Senders without saved details or recent activity still get a sheet —
   // everything starts zeroed and saving creates the contact
-  const contact =
-    data?.contacts.find((candidate) => candidate.email === normalized) ??
-    (normalized ? emptyContact(normalized) : null);
+  const contact = isIgnored
+    ? null
+    : (data?.contacts.find((candidate) => candidate.email === normalized) ??
+      (normalized ? emptyContact(normalized) : null));
 
   return (
     <Sheet open={!!email} onOpenChange={(open) => !open && onClose()}>
@@ -76,6 +81,12 @@ function ContactPeekSheet({
                 mutateContacts={() => mutate()}
                 onDeleted={onClose}
               />
+            )}
+            {isIgnored && (
+              <p className="text-sm text-muted-foreground">
+                You ignored {normalized}, so there's nothing to show. Restore it
+                from the Suggested tab in Contacts.
+              </p>
             )}
           </LoadingContent>
         )}

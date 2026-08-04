@@ -353,10 +353,10 @@ function useIframeHeight(iframeRef: React.RefObject<HTMLIFrameElement | null>) {
 
     const measure = () => {
       try {
-        const documentElement = iframe.contentWindow?.document?.documentElement;
-        if (documentElement?.scrollHeight) {
-          setHeight(documentElement.scrollHeight);
-        }
+        const iframeDocument = iframe.contentWindow?.document;
+        if (!iframeDocument) return;
+        const contentHeight = getIntrinsicContentHeight(iframeDocument);
+        if (contentHeight) setHeight(contentHeight);
       } catch (error) {
         console.error("Failed to get iframe height:", error);
       }
@@ -389,4 +389,19 @@ function useIframeHeight(iframeRef: React.RefObject<HTMLIFrameElement | null>) {
   }, [iframeRef]);
 
   return height;
+}
+
+// The root element's `scrollHeight` is floored at the frame's own viewport
+// height, and that viewport is the height we set from this measurement. Reading
+// it would feed our height back in: every ResizeObserver delivery would re-add
+// the 3px slack, and hiding quoted text could never shrink the frame below the
+// height it already had. The body scroll height and the content boxes track the
+// document's own content instead, so they can go back down.
+function getIntrinsicContentHeight(iframeDocument: Document) {
+  const { body, documentElement } = iframeDocument;
+  return Math.max(
+    body?.scrollHeight ?? 0,
+    body?.offsetHeight ?? 0,
+    documentElement?.offsetHeight ?? 0,
+  );
 }

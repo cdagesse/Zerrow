@@ -19,6 +19,8 @@ import { learnFromOutlookLabelRemoval } from "@/utils/webhook/outlook/learn-labe
 import prisma from "@/utils/prisma";
 import { runWithBackgroundLoggerFlush } from "@/utils/logger-flush";
 import { withRateLimitRecording } from "@/utils/email/rate-limit";
+import { publishNewInboxEmail } from "@/utils/redis/live-inbox";
+import { OutlookLabel } from "@/utils/outlook/constants";
 
 export async function processHistoryForUser({
   subscriptionId,
@@ -183,6 +185,18 @@ export async function processHistoryForUser({
             logger,
           },
         );
+
+        // Nudge open mail pages to refresh, after rules have run so the
+        // refreshed list already carries plan badges. Best-effort: never block
+        // the webhook. Matches what the Gmail webhook publishes, so
+        // /api/email-stream feeds both providers the same event.
+        if (isInInbox && !message.labelIds?.includes(OutlookLabel.DRAFT)) {
+          publishNewInboxEmail({
+            emailAccountId: validatedEmailAccount.id,
+          }).catch((error) => {
+            logger.warn("Failed to publish live inbox event", { error });
+          });
+        }
 
         return NextResponse.json({ ok: true });
       },

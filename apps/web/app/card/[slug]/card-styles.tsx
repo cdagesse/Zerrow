@@ -92,25 +92,33 @@ function StarLayer({
   driftSeconds: number;
 }) {
   return (
-    <div style={{ animation: `drift ${driftSeconds}s linear infinite` }}>
-      <div style={{ position: "absolute", inset: 0 }}>
-        {stars.map((star) => (
-          <div
-            key={`${star.left}-${star.top}-${star.size}`}
-            style={{
-              position: "absolute",
-              left: star.left,
-              top: star.top,
-              width: star.size,
-              height: star.size,
-              borderRadius: "50%",
-              background: star.color,
-              opacity: star.opacity,
-              animation: star.animation,
-            }}
-          />
-        ))}
-      </div>
+    // Must fill CardSky itself: the drift transform makes this element the
+    // containing block for the stars, and a layer left in normal flow collapses
+    // to zero height around its absolute children — every star's percentage
+    // `top` would then resolve to the top of the sky.
+    <div
+      style={{
+        position: "absolute",
+        inset: 0,
+        animation: `drift ${driftSeconds}s linear infinite`,
+      }}
+    >
+      {stars.map((star) => (
+        <div
+          key={`${star.left}-${star.top}-${star.size}`}
+          style={{
+            position: "absolute",
+            left: star.left,
+            top: star.top,
+            width: star.size,
+            height: star.size,
+            borderRadius: "50%",
+            background: star.color,
+            opacity: star.opacity,
+            animation: star.animation,
+          }}
+        />
+      ))}
     </div>
   );
 }

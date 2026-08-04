@@ -152,11 +152,14 @@ export function MessagePart({
   // type-specific branches below, which only cover input-available and
   // output-available: an unhandled rejection rendered nothing at all, while the
   // assistant's prose frequently claimed the change had been made.
+  //
+  // A schema rejection changes nothing, but a throw inside execute can happen
+  // after part of the work landed, so the copy can't promise either way.
   if (isFailedToolPart(part)) {
     return (
       <ErrorToolCard
         key={key}
-        error="The assistant sent an invalid request to this tool, so nothing changed."
+        error="This tool call failed and may not have completed. Check before trying it again."
       />
     );
   }

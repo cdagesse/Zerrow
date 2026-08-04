@@ -24,15 +24,27 @@ export function ExchangeSuggestions({
   mutateContacts: () => void;
 }) {
   const { emailAccountId } = useAccount();
-  // Resolved rows leave immediately; the server call follows
+  // Resolved rows leave immediately; the server call follows. A failed call
+  // puts the row back, otherwise the decision can't be retried without a
+  // refetch
   const [resolved, setResolved] = useState<string[]>([]);
 
   const resolve = useAction(
     resolveContactCardExchangeAction.bind(null, emailAccountId),
     {
-      onSuccess: () => mutateContacts(),
-      onError: (error) => {
-        toastError({ description: getActionErrorMessage(error.error) });
+      // Confirm the save only once the server has actually made it
+      onSuccess: ({ input }) => {
+        if (input.accept) {
+          const entry = pending.find((row) => row.id === input.exchangeId);
+          if (entry) toastSuccess({ description: `${entry.name} added` });
+        }
+        mutateContacts();
+      },
+      onError: ({ error, input }) => {
+        setResolved((current) =>
+          current.filter((id) => id !== input.exchangeId),
+        );
+        toastError({ description: getActionErrorMessage(error) });
       },
     },
   );
@@ -88,7 +100,6 @@ export function ExchangeSuggestions({
               onClick={() => {
                 setResolved((current) => [...current, entry.id]);
                 resolve.execute({ exchangeId: entry.id, accept: true });
-                toastSuccess({ description: `${entry.name} added` });
               }}
               size="sm"
             >

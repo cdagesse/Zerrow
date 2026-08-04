@@ -11,6 +11,7 @@ import { captureException } from "@/utils/error";
 import { getMockParsedMessage } from "@/__tests__/mocks/email-provider.mock";
 import { learnFromOutlookLabelRemoval } from "@/utils/webhook/outlook/learn-label-removal";
 import prisma from "@/utils/prisma";
+import { publishNewInboxEmail } from "@/utils/redis/live-inbox";
 import { createTestLogger } from "@/__tests__/helpers";
 
 const logger = createTestLogger();
@@ -55,6 +56,10 @@ vi.mock("@/utils/error", async (importOriginal) => {
 
 vi.mock("@/utils/email/rate-limit", () => ({
   withRateLimitRecording: vi.fn(async (_context, operation) => operation()),
+}));
+
+vi.mock("@/utils/redis/live-inbox", () => ({
+  publishNewInboxEmail: vi.fn().mockResolvedValue(undefined),
 }));
 
 describe("Outlook processHistoryForUser - Folder Filtering", () => {
@@ -115,6 +120,10 @@ describe("Outlook processHistoryForUser - Folder Filtering", () => {
       expect.any(Object),
     );
     expect(learnFromOutlookLabelRemoval).not.toHaveBeenCalled();
+    // Open mail pages listen for this on /api/email-stream regardless of provider
+    expect(publishNewInboxEmail).toHaveBeenCalledWith({
+      emailAccountId: "account-123",
+    });
   });
 
   it("looks up the account by email when no subscription ID is provided", async () => {
@@ -152,6 +161,7 @@ describe("Outlook processHistoryForUser - Folder Filtering", () => {
     expect(markMessageAsProcessing).toHaveBeenCalled();
     expect(processHistoryItem).toHaveBeenCalled();
     expect(learnFromOutlookLabelRemoval).not.toHaveBeenCalled();
+    expect(publishNewInboxEmail).not.toHaveBeenCalled();
   });
 
   it("skips messages in DRAFT folder without acquiring lock", async () => {
