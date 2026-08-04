@@ -1,4 +1,4 @@
-import { SubjectMatchMode } from "@/generated/prisma/enums";
+import { SubjectMatchMode, SubjectMatchScope } from "@/generated/prisma/enums";
 import {
   describeStaticConditions,
   type StaticConditionField,
@@ -11,6 +11,7 @@ import {
 } from "@/utils/email";
 import type { Logger } from "@/utils/logger";
 import {
+  hasReplyPrefix,
   matchesEmailFieldPattern,
   matchesSubjectPattern,
   matchesTextPattern,
@@ -24,6 +25,7 @@ type StaticRuleConditions = Pick<
   "from" | "to" | "subject" | "body"
 > & {
   subjectMatchMode?: SubjectMatchMode | null;
+  subjectMatchScope?: SubjectMatchScope | null;
   fromExclude?: boolean;
   toExclude?: boolean;
   subjectExclude?: boolean;
@@ -91,15 +93,24 @@ export function getStaticConditionFailures(
     : true;
   if (!toMatch && to) failedFields.add("to");
 
-  const subjectPatternMatch = subject
-    ? matchesSubjectPattern(subject, message.headers.subject, log, {
-        anchorStart: rule.subjectMatchMode === SubjectMatchMode.STARTS_WITH,
-      })
+  // Scope is applied before the pattern, and before subjectExclude: "is not
+  // Daily Report, replies only" means the rule ignores originals rather than
+  // matching all of them. Negating an out-of-scope message would do the latter.
+  const subjectInScope = subject
+    ? isSubjectInMatchScope(rule.subjectMatchScope, message.headers.subject)
     : true;
+  const subjectPatternMatch =
+    subject && subjectInScope
+      ? matchesSubjectPattern(subject, message.headers.subject, log, {
+          anchorStart: rule.subjectMatchMode === SubjectMatchMode.STARTS_WITH,
+        })
+      : true;
   const subjectMatch = subject
-    ? rule.subjectExclude
-      ? !subjectPatternMatch
-      : subjectPatternMatch
+    ? subjectInScope
+      ? rule.subjectExclude
+        ? !subjectPatternMatch
+        : subjectPatternMatch
+      : false
     : true;
   if (!subjectMatch && subject) failedFields.add("subject");
 
@@ -166,4 +177,19 @@ function normalizeEmailDisplayNameHeaderForRuleMatching(header: string) {
     })
     .filter(Boolean)
     .join(", ");
+}
+
+/**
+ * Whether a subject condition applies to this message at all.
+ *
+ * ANY keeps the long-standing behaviour: prefixes are stripped from both sides
+ * so a topic rule catches the opening message and every reply to it.
+ */
+export function isSubjectInMatchScope(
+  scope: SubjectMatchScope | null | undefined,
+  subject: string,
+): boolean {
+  if (!scope || scope === SubjectMatchScope.ANY) return true;
+  const isReply = hasReplyPrefix(subject);
+  return scope === SubjectMatchScope.REPLIES ? isReply : !isReply;
 }

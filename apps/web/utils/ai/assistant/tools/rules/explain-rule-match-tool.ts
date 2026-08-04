@@ -92,6 +92,7 @@ export const explainRuleMatchTool = ({
             groupId: true,
             conditionalOperator: true,
             subjectMatchMode: true,
+            subjectMatchScope: true,
             runOnThreads: true,
           },
         });

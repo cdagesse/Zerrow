@@ -76,6 +76,7 @@ export type RunRulesResult = {
     | "toExclude"
     | "subjectExclude"
     | "subjectMatchMode"
+    | "subjectMatchScope"
   > | null;
   actionItems?: ActionItem[];
   reason?: string | null;

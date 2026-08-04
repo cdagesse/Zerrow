@@ -70,6 +70,7 @@ export async function createRuleHistory({
       toExclude: rule.toExclude,
       subject: rule.subject,
       subjectMatchMode: rule.subjectMatchMode,
+      subjectMatchScope: rule.subjectMatchScope,
       subjectExclude: rule.subjectExclude,
       body: rule.body,
       excludeKnownContacts: rule.excludeKnownContacts,

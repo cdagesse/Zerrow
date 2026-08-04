@@ -96,6 +96,7 @@ export const reportRuleMisfireTool = ({
               groupId: true,
               conditionalOperator: true,
               subjectMatchMode: true,
+              subjectMatchScope: true,
             },
           }),
         ]);
