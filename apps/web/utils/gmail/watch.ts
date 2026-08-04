@@ -8,7 +8,9 @@ import {
 } from "@/utils/gmail/retry";
 
 export async function watchGmail(gmail: gmail_v1.Gmail) {
-  if (env.GOOGLE_PUBSUB_VERIFICATION_TOKEN == null) {
+  // Falsy, not nullish: the webhook rejects a blank token, so registering a
+  // watch on one buys a subscription whose every delivery 503s.
+  if (!env.GOOGLE_PUBSUB_VERIFICATION_TOKEN) {
     throw new Error(
       "GOOGLE_PUBSUB_VERIFICATION_TOKEN is required to watch Gmail",
     );

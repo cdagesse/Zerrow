@@ -209,7 +209,12 @@ const parsedEnv = createEnv({
     ),
 
     GOOGLE_PUBSUB_TOPIC_NAME: z.string().min(1),
-    GOOGLE_PUBSUB_VERIFICATION_TOKEN: z.string().optional(),
+    // .min(1) so a blank value fails at boot rather than at delivery time:
+    // the webhook rejects a blank token, so a deployment that sets one to
+    // "disable verification" registers its Gmail watch and then 503s every
+    // push, which reads as mail silently stopping with nothing in the logs
+    // pointing at configuration.
+    GOOGLE_PUBSUB_VERIFICATION_TOKEN: z.string().min(1).optional(),
 
     MICROSOFT_WEBHOOK_CLIENT_STATE: z.string().optional(),
 
