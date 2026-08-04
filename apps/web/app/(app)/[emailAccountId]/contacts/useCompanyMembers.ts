@@ -32,7 +32,11 @@ export function useCompanyMembers({
       const lists = await Promise.all(
         domains.map(async (domain) => {
           const response = await fetch(
-            `/api/contacts?search=${encodeURIComponent(domain)}&limit=100`,
+            // The endpoint's highest allowed limit. It has no pagination, so
+            // a company with more people than this on one domain still shows
+            // a truncated list under a full-history people count — fixing
+            // that needs an endpoint that returns every match for a domain.
+            `/api/contacts?search=${encodeURIComponent(domain)}&limit=500`,
             { headers: { [EMAIL_ACCOUNT_HEADER]: emailAccountId } },
           );
           if (!response.ok) {

@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAction } from "next-safe-action/hooks";
+import { useSWRConfig } from "swr";
 import { ViewLearnedPatterns } from "@/app/(app)/[emailAccountId]/assistant/group/ViewLearnedPatterns";
 import {
   Dialog,
@@ -93,16 +94,56 @@ export function LearnedPatternsDialog({
           )
         )}
 
-        <LearnFromHistory ruleId={ruleId} />
+        {/* Learning creates the rule's group server-side if it has none, so
+            it must wait for the group setup above — two concurrent creates
+            leave this dialog without the group it renders */}
+        <LearnFromHistory
+          ruleId={ruleId}
+          groupId={learnedPatternGroupId}
+          disabled={isExecuting}
+        />
       </DialogContent>
     </Dialog>
   );
 }
 
+const PATTERN_POLL_INTERVAL_MS = 5000;
+// Matches the "within a few minutes" the toast promises
+const PATTERN_POLL_WINDOW_MS = 3 * 60 * 1000;
+
 // Patterns normally accrue only as new AI-matched mail arrives; this mines
 // the mail this rule has already been applied to, on demand
-function LearnFromHistory({ ruleId }: { ruleId: string }) {
+function LearnFromHistory({
+  ruleId,
+  groupId,
+  disabled,
+}: {
+  ruleId: string;
+  groupId: string | null;
+  disabled?: boolean;
+}) {
   const { emailAccountId } = useAccount();
+  const { mutate } = useSWRConfig();
+  const [pollUntil, setPollUntil] = useState<number | null>(null);
+  // The key ViewLearnedPatterns reads
+  const patternsKey = groupId ? `/api/user/group/${groupId}/items` : null;
+
+  // Queued senders are analyzed in the background, so the list above only
+  // shows what landed before it last loaded. Re-check for as long as the
+  // toast says patterns may still appear.
+  useEffect(() => {
+    if (!(patternsKey && pollUntil)) return;
+
+    const interval = setInterval(() => {
+      if (Date.now() >= pollUntil) {
+        setPollUntil(null);
+        return;
+      }
+      mutate(patternsKey);
+    }, PATTERN_POLL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [patternsKey, pollUntil, mutate]);
 
   const learn = useAction(
     learnPatternsFromHistoryAction.bind(null, emailAccountId),
@@ -110,6 +151,10 @@ function LearnFromHistory({ ruleId }: { ruleId: string }) {
       onSuccess: (result) => {
         if (!result.data) return;
         const { candidates, queued } = result.data;
+        if (queued) {
+          if (patternsKey) mutate(patternsKey);
+          setPollUntil(Date.now() + PATTERN_POLL_WINDOW_MS);
+        }
         toastSuccess({
           description: candidates
             ? `Analyzing ${queued} sender${queued === 1 ? "" : "s"} from this rule's history — patterns that qualify appear here within a few minutes.`
@@ -133,6 +178,7 @@ function LearnFromHistory({ ruleId }: { ruleId: string }) {
         size="sm"
         className="shrink-0 self-start sm:self-auto"
         loading={learn.isExecuting}
+        disabled={disabled}
         onClick={() => learn.execute({ ruleId })}
       >
         Learn from history

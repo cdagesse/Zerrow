@@ -72,7 +72,7 @@ describe("MessagePart tool failures", () => {
 
     // The SDK's errorText serializes the tool input, so the card shows a
     // curated message instead of echoing the user's data back at them.
-    expect(screen.getByText(/nothing changed/)).toBeTruthy();
+    expect(screen.getByText(/failed/)).toBeTruthy();
     expect(screen.queryByText(/Invalid arguments for tool updateRule/)).toBe(
       null,
     );
@@ -86,7 +86,22 @@ describe("MessagePart tool failures", () => {
       errorText: "Rule conditions were stale",
     });
 
-    expect(screen.getByText(/nothing changed/)).toBeTruthy();
+    expect(screen.getByText(/failed/)).toBeTruthy();
+  });
+
+  // "output-error" also covers a throw inside execute(), which can happen after
+  // some of the work landed, so the card must not tell the user their inbox was
+  // left untouched.
+  it("does not claim a failed tool call left everything unchanged", () => {
+    const { container } = renderPart({
+      type: "tool-manageInbox",
+      toolCallId: "call-4",
+      state: "output-error",
+      errorText: "Archiving threw halfway through",
+    });
+
+    expect(container.textContent).not.toMatch(/nothing changed/i);
+    expect(container.textContent).not.toMatch(/unchanged/i);
   });
 
   it("shows an in-flight dynamic-tool call instead of nothing", () => {

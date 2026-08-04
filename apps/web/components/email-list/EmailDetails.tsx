@@ -46,20 +46,27 @@ function RecipientList({ value }: { value: string }) {
 
   return (
     <>
-      {recipients.map((recipient, i) => (
-        <Fragment key={recipient}>
-          {i > 0 && ", "}
-          <button
-            type="button"
-            className="text-left hover:underline"
-            onClick={() =>
-              openContactPeek(extractEmailAddress(recipient) || recipient)
-            }
-          >
-            {recipient}
-          </button>
-        </Fragment>
-      ))}
+      {recipients.map((recipient, i) => {
+        const emailAddress = extractEmailAddress(recipient);
+        return (
+          <Fragment key={recipient}>
+            {i > 0 && ", "}
+            {emailAddress ? (
+              <button
+                type="button"
+                className="text-left hover:underline"
+                onClick={() => openContactPeek(emailAddress)}
+              >
+                {recipient}
+              </button>
+            ) : (
+              // Group syntax ("undisclosed-recipients:;") and other non-address
+              // tokens have no contact to look up, so they stay plain text
+              recipient
+            )}
+          </Fragment>
+        );
+      })}
     </>
   );
 }

@@ -20,6 +20,10 @@ import { PermissionsCheck } from "@/app/(app)/[emailAccountId]/PermissionsCheck"
 import { createSearchParams } from "@/utils/url";
 import { useAccount } from "@/providers/EmailAccountProvider";
 import { useInboxStream } from "@/hooks/useInboxStream";
+import {
+  ConversionAnalyticsScript,
+  ConversionQueryParamEvents,
+} from "@/components/ConversionAnalytics";
 import { ContactPeekProvider } from "./ContactPeek";
 
 export default function Mail(props: {
@@ -152,6 +156,10 @@ export default function Mail(props: {
     <PinnedPage>
       <ContactPeekProvider>
         <PermissionsCheck />
+        {/* Stripe checkout redirects here with the trial_started conversion
+            params, so the tracker has to be mounted on this page to fire */}
+        <ConversionQueryParamEvents />
+        <ConversionAnalyticsScript />
         <MailControlBar
           type={searchParams.type}
           labelId={searchParams.labelId}
