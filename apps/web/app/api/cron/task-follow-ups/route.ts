@@ -17,6 +17,10 @@ export const maxDuration = 300;
 // One run's ceiling; anything beyond waits for the next hourly pass
 const BATCH_SIZE = 50;
 
+// How long a claimed task stays off the due list before another run may retry
+// it. Longer than maxDuration so an in-flight task is never picked up twice.
+const CLAIM_LEASE_MS = 15 * 60 * 1000;
+
 // Hourly chase loop: for every armed task whose next follow-up is due,
 // either read the assignee's reply into the task or send the next check-in.
 export const GET = withError("cron/task-follow-ups", async (request) => {
@@ -71,11 +75,12 @@ async function processDueTaskFollowUps(logger: Logger) {
     take: BATCH_SIZE,
   });
 
-  const counts: Record<FollowUpOutcome | "failed", number> = {
+  const counts: Record<FollowUpOutcome | "failed" | "skipped", number> = {
     replied: 0,
     sent: 0,
     paused: 0,
     failed: 0,
+    skipped: 0,
   };
 
   // Group by account so each provider client and AI config loads once
@@ -108,6 +113,14 @@ async function processDueTaskFollowUps(logger: Logger) {
 
       for (const task of tasks) {
         try {
+          if (!(await claimTaskFollowUp({ task, now }))) {
+            counts.skipped += 1;
+            accountLogger.info("Follow-up already claimed by another run", {
+              taskId: task.id,
+            });
+            continue;
+          }
+
           const outcome = await processTaskFollowUp({
             task,
             emailAccount,
@@ -138,4 +151,25 @@ async function processDueTaskFollowUps(logger: Logger) {
 
   logger.info("Task follow-ups processed", { due: dueTasks.length, ...counts });
   return { due: dueTasks.length, ...counts };
+}
+
+// Overlapping invocations both read the same due task, so without a claim each
+// one would send its own follow-up to the assignee. Moving nextFollowUpAt onto
+// a short lease, conditional on the value this run read, lets exactly one
+// invocation win; a run that dies mid-task retries on the next hourly pass.
+async function claimTaskFollowUp({
+  task,
+  now,
+}: {
+  task: { id: string; nextFollowUpAt: Date | null };
+  now: Date;
+}) {
+  if (!task.nextFollowUpAt) return false;
+
+  const { count } = await prisma.task.updateMany({
+    where: { id: task.id, nextFollowUpAt: task.nextFollowUpAt },
+    data: { nextFollowUpAt: new Date(now.getTime() + CLAIM_LEASE_MS) },
+  });
+
+  return count === 1;
 }

@@ -101,21 +101,26 @@ async function getThreads({
       status: true,
       reason: true,
     },
-    // The badge shows the CURRENT decision: newest first, and a decision
-    // from a since-disabled rule is history, not the answer
+    // The badge shows the CURRENT decision, so keep the newest execution per
+    // thread. A global row cap would instead spend the whole budget on one
+    // heavily-reprocessed thread and leave the rest looking unplanned, which
+    // makes bulk processing requeue mail it has already acted on.
     orderBy: { createdAt: "desc" },
-    // Reprocessing appends a row per run, so a thread can accumulate many
-    // executions; the newest-per-thread is all the badge needs. Cap the
-    // payload so a heavily-reprocessed page can't pull thousands of rows.
-    take: (query.limit || 50) * 3,
+    distinct: ["threadId"],
   });
+
+  const newestPlanByThreadId = new Map(
+    plans.map((plan) => [plan.threadId, plan]),
+  );
 
   // Process threads with plans and categories
   const threadsWithPlans = await Promise.all(
     threads.map(async (thread) => {
-      const plan = plans.find(
-        (p) => p.threadId === thread.id && p.rule?.enabled !== false,
-      );
+      const newestPlan = newestPlanByThreadId.get(thread.id);
+      // A decision from a since-disabled rule is history, not the answer:
+      // hide it rather than falling back to an older execution, which would
+      // advertise a decision the rules no longer make
+      const plan = newestPlan?.rule?.enabled === false ? undefined : newestPlan;
 
       // Filter out ignored senders from the already parsed messages
       const filteredMessages = thread.messages.filter((message) => {

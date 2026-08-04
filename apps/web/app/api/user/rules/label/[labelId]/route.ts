@@ -31,9 +31,23 @@ async function getFolderRule({
             emailAccountId,
           },
         },
-        select: { from: true, fromExclude: true },
+        select: {
+          from: true,
+          fromExclude: true,
+          enabled: true,
+          actions: { select: { type: true } },
+        },
       })
     : null;
+
+  // A companion that is switched off, or that lost its MARK_READ action, is
+  // not marking anything read — reporting its scoped mode would show
+  // auto-read as on while no mail is ever touched
+  const liveAutoReadRule =
+    autoReadRule?.enabled &&
+    autoReadRule.actions.some((action) => action.type === ActionType.MARK_READ)
+      ? autoReadRule
+      : null;
 
   const rules = await prisma.rule.findMany({
     where: {
@@ -83,13 +97,15 @@ async function getFolderRule({
     // another one filing into the same folder
     otherRuleNames: others.map((other) => other.name),
     autoRead: {
-      mode: autoReadRule
-        ? autoReadRule.fromExclude
+      mode: liveAutoReadRule
+        ? liveAutoReadRule.fromExclude
           ? ("except" as const)
           : ("only" as const)
         : rule?.actions.some((action) => action.type === ActionType.MARK_READ)
           ? ("all" as const)
           : ("off" as const),
+      // Kept even when the companion is off, so re-enabling a scoped mode
+      // doesn't make the user retype the list
       senders: autoReadRule?.from ?? "",
     },
   };
@@ -105,9 +121,17 @@ export const GET = withEmailAccount(
     const { searchParams } = new URL(request.url);
     const labelName = searchParams.get("name") || undefined;
 
+    let labelId: string;
+    try {
+      labelId = decodeURIComponent(params.labelId);
+    } catch {
+      // A malformed escape is a bad request, not a server fault
+      return NextResponse.json({ error: "Invalid label id" }, { status: 400 });
+    }
+
     const result = await getFolderRule({
       emailAccountId,
-      labelId: decodeURIComponent(params.labelId),
+      labelId,
       labelName,
     });
 

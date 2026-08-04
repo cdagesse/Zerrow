@@ -64,7 +64,17 @@ async function getPreview({
             from: { equals: part, mode: "insensitive" as const },
           })),
         }
-      : { fromDomain: { in: parts.map((part) => part.replace(/^@/, "")) } };
+      : {
+          // Cached domains keep the header's casing, while the rule this
+          // previews matches case-insensitively — compare the same way or
+          // the count undersells what will move
+          OR: parts.map((part) => ({
+            fromDomain: {
+              equals: part.replace(/^@/, ""),
+              mode: "insensitive" as const,
+            },
+          })),
+        };
 
   const [total, inbox, last7Days, scanned7Days] = await Promise.all([
     prisma.emailMessage.count({ where: { ...received, ...match } }),
