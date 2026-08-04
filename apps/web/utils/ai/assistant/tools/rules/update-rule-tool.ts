@@ -1,5 +1,4 @@
 import { type InferUITool, tool } from "ai";
-import { createHash } from "node:crypto";
 import { z } from "zod";
 import { ActionType, LogicalOperator } from "@/generated/prisma/enums";
 import type { Logger } from "@/utils/logger";
@@ -58,7 +57,7 @@ export const updateRuleTool = ({
 }) =>
   tool({
     description:
-      "Update an existing rule after reading the user's current rules. Use this for direct requests to change rule name, enabled state, conditions, or actions; no capabilities lookup is needed before editing an existing rule. This is a patch: include only the fields being changed, and omitted fields are preserved. Use updates.name to rename a rule. Use updates.condition to change conditions; omit condition fields that should stay unchanged, and set a static field to null only when the user explicitly asks to clear it. Do not set aiInstructions to null to preserve instructions; omit it instead. Use clearAiInstructions only when the user explicitly asks to remove semantic instructions. Use DRAFT_EMAIL for draft reply actions; do not use SEND_EMAIL or REPLY when the user asks to draft. Never use this tool to add/remove a sender or domain from an existing category rule; use updateLearnedPatterns for recurring sender/domain includes and excludes instead. This tool never writes on its first call: it returns requiresApproval with the change it would make and an approvalToken. Show that change to the user, wait for them to agree, then call again with the same arguments plus the token. Do not create a replacement rule for edits. Some action types are managed outside chat (for example messaging-channel notifications) and cannot appear in updates.actions; they are preserved automatically on every edit and are reported back in preservedActionTypes. Never tell the user those actions were removed, and direct them to the rule editor if they want to change them.",
+      "Update an existing rule after reading the user's current rules. Use this for direct requests to change rule name, enabled state, conditions, or actions; no capabilities lookup is needed before editing an existing rule. This is a patch: include only the fields being changed, and omitted fields are preserved. Use updates.name to rename a rule. Use updates.condition to change conditions; omit condition fields that should stay unchanged, and set a static field to null only when the user explicitly asks to clear it. Do not set aiInstructions to null to preserve instructions; omit it instead. Use clearAiInstructions only when the user explicitly asks to remove semantic instructions. Use DRAFT_EMAIL for draft reply actions; do not use SEND_EMAIL or REPLY when the user asks to draft. Never use this tool to add/remove a sender or domain from an existing category rule; use updateLearnedPatterns for recurring sender/domain includes and excludes instead. This tool never writes. It returns the change it would make, which the user is shown and must approve before it is applied, so describe the change in your reply and do not claim the rule has been changed or call the tool again to apply it. Do not create a replacement rule for edits. Some action types are managed outside chat (for example messaging-channel notifications) and cannot appear in updates.actions; they are preserved automatically on every edit and are reported back in preservedActionTypes. Never tell the user those actions were removed, and direct them to the rule editor if they want to change them.",
     inputSchema: z
       .object({
         ruleName: z.string().describe("The exact current name of the rule."),
@@ -88,16 +87,9 @@ export const updateRuleTool = ({
           .refine((updates) => Object.keys(updates).length > 0, {
             message: "At least one update field is required.",
           }),
-        approvalToken: z
-          .string()
-          .trim()
-          .optional()
-          .describe(
-            "Token returned by a previous call to this tool for this exact change. Omit on the first call: the tool will not write, it returns the change it would make plus this token. Show that change to the user in your reply, and only call again with the token once they have agreed to it. Never reuse a token from a different change and never invent one.",
-          ),
       })
       .describe("Patch update for an existing rule."),
-    execute: async ({ ruleName, updates, approvalToken }) => {
+    execute: async ({ ruleName, updates }) => {
       trackRuleToolCall({ tool: "update_rule", email, logger });
       try {
         const readValidationError = validateRuleWasReadRecently({
@@ -117,40 +109,7 @@ export const updateRuleTool = ({
           });
         }
 
-        const rule = await prisma.rule.findUnique({
-          where: { name_emailAccountId: { name: ruleName, emailAccountId } },
-          select: {
-            id: true,
-            name: true,
-            enabled: true,
-            updatedAt: true,
-            organizationRuleId: true,
-            instructions: true,
-            from: true,
-            to: true,
-            subject: true,
-            conditionalOperator: true,
-            emailAccount: {
-              select: {
-                rulesRevision: true,
-              },
-            },
-            actions: {
-              select: {
-                type: true,
-                content: true,
-                label: true,
-                to: true,
-                cc: true,
-                bcc: true,
-                subject: true,
-                url: true,
-                folderName: true,
-                delayInMinutes: true,
-              },
-            },
-          },
-        });
+        const rule = await loadRuleForUpdate({ ruleName, emailAccountId });
 
         if (!rule) {
           return buildHiddenRuleNotFoundError();
@@ -195,25 +154,7 @@ export const updateRuleTool = ({
           }),
           conditionalOperator: rule.conditionalOperator,
         };
-        const originalActions = rule.actions.map((action) => ({
-          type: action.type,
-          fields: filterNullProperties(
-            buildProviderRuleActionFields({
-              provider,
-              fields: {
-                label: action.label,
-                content: action.content,
-                to: action.to,
-                cc: action.cc,
-                bcc: action.bcc,
-                subject: action.subject,
-                webhookUrl: action.url,
-                folderName: action.folderName,
-              },
-            }),
-          ),
-          delayInMinutes: action.delayInMinutes,
-        }));
+        const originalActions = buildOriginalActions({ rule, provider });
         const requestedChangesAlreadyMatchRule = !ruleUpdateHasChanges({
           updates,
           rule,
@@ -251,106 +192,24 @@ export const updateRuleTool = ({
           };
         }
 
-        // Two-step approval. The first call never writes: it returns the
-        // change plus a token derived from it, so the assistant has to surface
-        // the change before it can apply it. A single call cannot mutate a
-        // rule, and a token minted for one change will not unlock another.
-        const expectedToken = buildRuleUpdateApprovalToken({
-          ruleId: rule.id,
-          updates: effectiveUpdates,
-        });
-        if (approvalToken !== expectedToken) {
-          return {
-            success: true,
-            requiresApproval: true as const,
-            approvalToken: expectedToken,
-            ruleId: rule.id,
-            ruleName: rule.name,
-            proposedUpdates: effectiveUpdates,
-            originalName: rule.name,
-            originalEnabled: rule.enabled,
-            originalConditions,
-            originalActions,
-            message:
-              "No change has been made. Describe this change to the user and wait for them to agree, then call updateRule again with the approvalToken.",
-          };
-        }
-
-        let preservedActionTypes: ActionType[] = [];
-
-        if (effectiveUpdates.name || effectiveUpdates.condition) {
-          await partialUpdateRule({
-            ruleId: rule.id,
-            emailAccountId,
-            data: {
-              ...(effectiveUpdates.name && { name: effectiveUpdates.name }),
-              ...(effectiveUpdates.condition &&
-                buildConditionUpdateData(effectiveUpdates.condition)),
-            },
-          });
-        }
-
-        if (effectiveUpdates.actions) {
-          preservedActionTypes = getInexpressibleActionTypes({
-            existingActions: rule.actions,
-            replacementActionTypes: effectiveUpdates.actions.map(
-              (action) => action.type,
-            ),
-            provider,
-          });
-
-          await updateRuleActions({
-            ruleId: rule.id,
-            actions: effectiveUpdates.actions.map((action) => ({
-              type: action.type,
-              fields: buildProviderRuleActionFields({
-                provider,
-                fields: action.fields ?? {},
-              }),
-              delayInMinutes: action.delayInMinutes ?? null,
-            })),
-            provider,
-            emailAccountId,
-            logger,
-            preserveActionTypes: preservedActionTypes,
-          });
-        }
-
-        if (
-          effectiveUpdates.enabled !== undefined &&
-          effectiveUpdates.enabled !== rule.enabled
-        ) {
-          await setRuleEnabled({
-            ruleId: rule.id,
-            emailAccountId,
-            enabled: effectiveUpdates.enabled,
-          });
-        }
-
-        const snapshot = await loadRuleSnapshotAfterWrite({
-          emailAccountId,
-          logger,
-          setRuleReadState,
-          onRulesStateExposed,
-        });
-        const currentRule = snapshot?.rules.find(
-          (snapshotRule) =>
-            snapshotRule.name === (effectiveUpdates.name ?? rule.name),
-        );
-
+        // The tool never writes. It describes the change and the user approves
+        // it in the chat, which calls confirmAssistantUpdateRule and applies it
+        // from the persisted tool input. A model cannot reach the write path,
+        // so it cannot edit a rule on its own however it is prompted.
         return {
           success: true,
+          actionType: "update_rule" as const,
+          requiresConfirmation: true as const,
+          confirmationState: "pending" as const,
           ruleId: rule.id,
+          ruleName: rule.name,
+          proposedUpdates: effectiveUpdates,
           originalName: rule.name,
-          updatedName: effectiveUpdates.name ?? rule.name,
           originalEnabled: rule.enabled,
-          updatedEnabled: effectiveUpdates.enabled ?? rule.enabled,
           originalConditions,
-          updatedConditions: effectiveUpdates.condition,
           originalActions,
-          updatedActions: effectiveUpdates.actions,
-          preservedActionTypes,
-          currentRule,
+          message:
+            "No change has been made yet. Describe this change to the user; they approve it on the card shown with this message.",
         };
       } catch (error) {
         logger.error("Failed to update rule", { error, ruleName });
@@ -390,6 +249,19 @@ export type UpdateRuleOutput = {
   message?: string;
   ruleId?: string;
   error?: string;
+  /** Set while the change is waiting for the user to approve it in chat. */
+  actionType?: "update_rule";
+  requiresConfirmation?: boolean;
+  confirmationState?: "pending" | "processing" | "confirmed";
+  ruleName?: string;
+  /** What would be written, already normalized against the current rule. */
+  proposedUpdates?: RuleUpdatePatch;
+  confirmationResult?: {
+    ruleId: string;
+    updatedName: string;
+    confirmedAt: string;
+    alreadyApplied?: boolean;
+  };
   originalName?: string;
   updatedName?: string;
   originalEnabled?: boolean;
@@ -413,6 +285,135 @@ export type UpdateRuleOutput = {
   preservedActionTypes?: ActionType[];
   currentRule?: AssistantRuleSnapshot["rules"][number];
 };
+
+/**
+ * Applies an update the user approved in chat. The tool itself never writes,
+ * so this is the only path to a rule edit from the assistant, reached from
+ * confirmAssistantUpdateRuleForAccount with the tool input the server
+ * persisted.
+ *
+ * The patch is re-normalised against the rule as it is now rather than against
+ * the snapshot taken when the change was proposed: approval means "make this
+ * change", and the rule may have moved in between.
+ */
+export async function applyApprovedRuleUpdate({
+  ruleName,
+  updates,
+  emailAccountId,
+  provider,
+  logger,
+}: {
+  ruleName: string;
+  updates: RuleUpdatePatch;
+  emailAccountId: string;
+  provider: string;
+  logger: Logger;
+}) {
+  const rule = await loadRuleForUpdate({ ruleName, emailAccountId });
+  if (!rule) throw new SafeError("That rule no longer exists.");
+  if (rule.organizationRuleId) {
+    throw new SafeError("This rule is managed by your organization.");
+  }
+
+  const originalActions = buildOriginalActions({ rule, provider });
+  const effectiveUpdates = normalizeRuleUpdates({
+    updates,
+    rule,
+    originalActions,
+  });
+
+  if (!ruleUpdateHasChanges({ updates, rule, originalActions })) {
+    return {
+      ruleId: rule.id,
+      updatedName: rule.name,
+      alreadyApplied: true as const,
+      preservedActionTypes: [] as ActionType[],
+      currentRule: await loadRuleAfterUpdate({
+        emailAccountId,
+        logger,
+        name: rule.name,
+      }),
+    };
+  }
+
+  if (effectiveUpdates.name || effectiveUpdates.condition) {
+    await partialUpdateRule({
+      ruleId: rule.id,
+      emailAccountId,
+      data: {
+        ...(effectiveUpdates.name && { name: effectiveUpdates.name }),
+        ...(effectiveUpdates.condition &&
+          buildConditionUpdateData(effectiveUpdates.condition)),
+      },
+    });
+  }
+
+  let preservedActionTypes: ActionType[] = [];
+
+  if (effectiveUpdates.actions) {
+    preservedActionTypes = getInexpressibleActionTypes({
+      existingActions: rule.actions,
+      replacementActionTypes: effectiveUpdates.actions.map(
+        (action) => action.type,
+      ),
+      provider,
+    });
+
+    await updateRuleActions({
+      ruleId: rule.id,
+      actions: effectiveUpdates.actions.map((action) => ({
+        type: action.type,
+        fields: buildProviderRuleActionFields({
+          provider,
+          fields: action.fields ?? {},
+        }),
+        delayInMinutes: action.delayInMinutes ?? null,
+      })),
+      provider,
+      emailAccountId,
+      logger,
+      preserveActionTypes: preservedActionTypes,
+    });
+  }
+
+  if (
+    effectiveUpdates.enabled !== undefined &&
+    effectiveUpdates.enabled !== rule.enabled
+  ) {
+    await setRuleEnabled({
+      ruleId: rule.id,
+      emailAccountId,
+      enabled: effectiveUpdates.enabled,
+    });
+  }
+
+  const updatedName = effectiveUpdates.name ?? rule.name;
+
+  return {
+    ruleId: rule.id,
+    updatedName,
+    alreadyApplied: false as const,
+    preservedActionTypes,
+    currentRule: await loadRuleAfterUpdate({
+      emailAccountId,
+      logger,
+      name: updatedName,
+    }),
+  };
+}
+
+async function loadRuleAfterUpdate({
+  emailAccountId,
+  logger,
+  name,
+}: {
+  emailAccountId: string;
+  logger: Logger;
+  name: string;
+}) {
+  const snapshot = await loadRuleSnapshotAfterWrite({ emailAccountId, logger });
+  return snapshot?.rules.find((snapshotRule) => snapshotRule.name === name);
+}
 
 type PatchCondition = {
   aiInstructions?: string;
@@ -718,38 +719,73 @@ function getInexpressibleActionTypes({
   ];
 }
 
-/**
- * Binds an approval to one exact change on one exact rule.
- *
- * Derived from the normalized updates rather than the raw input so that two
- * requests meaning the same thing produce the same token, and any difference
- * in what would actually be written produces a different one — an approval for
- * "disable this rule" cannot be replayed to rewrite its actions.
- */
-function buildRuleUpdateApprovalToken({
-  ruleId,
-  updates,
+async function loadRuleForUpdate({
+  ruleName,
+  emailAccountId,
 }: {
-  ruleId: string;
-  // biome-ignore lint/suspicious/noExplicitAny: normalized patch shape
-  updates: Record<string, any>;
+  ruleName: string;
+  emailAccountId: string;
 }) {
-  return createHash("sha256")
-    .update(`${ruleId}:${stableStringify(updates)}`)
-    .digest("hex")
-    .slice(0, 32);
+  return prisma.rule.findUnique({
+    where: { name_emailAccountId: { name: ruleName, emailAccountId } },
+    select: {
+      id: true,
+      name: true,
+      enabled: true,
+      updatedAt: true,
+      organizationRuleId: true,
+      instructions: true,
+      from: true,
+      to: true,
+      subject: true,
+      conditionalOperator: true,
+      emailAccount: {
+        select: {
+          rulesRevision: true,
+        },
+      },
+      actions: {
+        select: {
+          type: true,
+          content: true,
+          label: true,
+          to: true,
+          cc: true,
+          bcc: true,
+          subject: true,
+          url: true,
+          folderName: true,
+          delayInMinutes: true,
+        },
+      },
+    },
+  });
 }
 
-// JSON.stringify is key-order dependent; the same patch must always hash the
-// same way regardless of how the model happened to order the fields.
-// biome-ignore lint/suspicious/noExplicitAny: arbitrary patch values
-function stableStringify(value: any): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value);
-  if (Array.isArray(value)) {
-    return `[${value.map(stableStringify).join(",")}]`;
-  }
-  const keys = Object.keys(value).sort();
-  return `{${keys
-    .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
-    .join(",")}}`;
+function buildOriginalActions({
+  rule,
+  provider,
+}: {
+  rule: NonNullable<Awaited<ReturnType<typeof loadRuleForUpdate>>>;
+  provider: string;
+}) {
+  return rule.actions.map((action) => ({
+    type: action.type,
+    fields: filterNullProperties(
+      buildProviderRuleActionFields({
+        provider,
+        fields: {
+          label: action.label,
+          content: action.content,
+          to: action.to,
+          cc: action.cc,
+          bcc: action.bcc,
+          subject: action.subject,
+          webhookUrl: action.url,
+          folderName: action.folderName,
+        },
+      }),
+    ),
+    delayInMinutes: action.delayInMinutes,
+  }));
 }

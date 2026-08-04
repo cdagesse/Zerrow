@@ -7,7 +7,10 @@ import {
 import { createTestLogger } from "@/__tests__/helpers";
 import { SafeError } from "@/utils/error";
 import { createRuleTool } from "./tools/rules/create-rule-tool";
-import { updateRuleTool } from "./tools/rules/update-rule-tool";
+import {
+  applyApprovedRuleUpdate,
+  updateRuleTool,
+} from "./tools/rules/update-rule-tool";
 import { deleteRuleTool } from "./tools/rules/delete-rule-tool";
 
 const {
@@ -359,32 +362,25 @@ describe("updateRuleTool", () => {
   // The blanket catch used to collapse every failure to "Failed to update
   // rule", discarding messages the model could have acted on -- sender-scope
   // overlaps, disabled action types, webhook validation, label resolution.
-  it("surfaces the reason a write was rejected instead of a generic failure", async () => {
+  // Guards throw SafeError with text worth showing — a sender-scope overlap, a
+  // disabled action type, an unresolvable label. The approval path lets it
+  // through so the action reports why, rather than a generic failure.
+  it("surfaces the reason an approved write was rejected", async () => {
     mockPartialUpdateRule.mockRejectedValue(
       new SafeError(
         'Sender "@vendor.example" already belongs to the rule "Vendor Mail".',
       ),
     );
 
-    const result = await approvingUpdateRuleTool({
-      email: "user@example.com",
-      emailAccountId: "email-account-id",
-      provider: "google",
-      logger,
-      getRuleReadState: () => ({
-        readAt: Date.now(),
-        rulesRevision: 3,
-        ruleUpdatedAtByName: new Map([
-          ["Vendor Billing", "2026-04-27T00:00:00.000Z"],
-        ]),
+    await expect(
+      applyApprovedRuleUpdate({
+        ruleName: "Vendor Billing",
+        updates: { condition: { static: { from: "@vendor.example" } } },
+        emailAccountId: "email-account-id",
+        provider: "google",
+        logger,
       }),
-    }).execute({
-      ruleName: "Vendor Billing",
-      updates: { condition: { static: { from: "@vendor.example" } } },
-    });
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("already belongs to the rule");
+    ).rejects.toThrow(/already belongs to the rule/);
   });
 
   it("strips copied rule fields from status-only updates before writing", async () => {
@@ -421,10 +417,8 @@ describe("updateRuleTool", () => {
     expect(result).toEqual(
       expect.objectContaining({
         success: true,
-        updatedEnabled: false,
         updatedName: "Vendor Billing",
-        updatedConditions: undefined,
-        updatedActions: undefined,
+        proposedUpdates: { enabled: false },
       }),
     );
     expect(mockPartialUpdateRule).not.toHaveBeenCalled();
@@ -513,13 +507,14 @@ describe("updateRuleTool", () => {
     expect(result).toEqual(
       expect.objectContaining({
         success: true,
-        updatedConditions: {
-          aiInstructions: "Billing notices that need finance review.",
+        proposedUpdates: {
+          condition: {
+            aiInstructions: "Billing notices that need finance review.",
+          },
         },
-        updatedActions: undefined,
       }),
     );
-    expect(result.alreadyApplied).toBeUndefined();
+    expect(result.alreadyApplied).toBe(false);
     expect(mockPartialUpdateRule).toHaveBeenCalledWith({
       ruleId: "rule-id",
       emailAccountId: "email-account-id",
@@ -564,17 +559,19 @@ describe("updateRuleTool", () => {
     expect(result).toEqual(
       expect.objectContaining({
         success: true,
-        updatedConditions: {
-          aiInstructions: "Billing notices.",
-          static: {
-            from: "accounts@vendor.example",
-            subject: "invoice",
+        proposedUpdates: {
+          condition: {
+            aiInstructions: "Billing notices.",
+            static: {
+              from: "accounts@vendor.example",
+              subject: "invoice",
+            },
+            conditionalOperator: "AND",
           },
-          conditionalOperator: "AND",
         },
       }),
     );
-    expect(result.alreadyApplied).toBeUndefined();
+    expect(result.alreadyApplied).toBe(false);
     expect(mockPartialUpdateRule).toHaveBeenCalledWith({
       ruleId: "rule-id",
       emailAccountId: "email-account-id",
@@ -851,55 +848,62 @@ describe("updateRuleTool approval gate", () => {
 
   const disable = { ruleName: "Vendor Billing", updates: { enabled: false } };
 
-  it("writes nothing on the first call and returns the change to show the user", async () => {
+  it("writes nothing and returns the change for the user to approve", async () => {
     const result: any = await (updateRuleTool(options) as any).execute(disable);
 
-    expect(result.requiresApproval).toBe(true);
-    expect(result.approvalToken).toEqual(expect.any(String));
+    expect(result.requiresConfirmation).toBe(true);
+    expect(result.confirmationState).toBe("pending");
+    expect(result.actionType).toBe("update_rule");
     expect(result.proposedUpdates).toMatchObject({ enabled: false });
+    expect(mockPartialUpdateRule).not.toHaveBeenCalled();
+    expect(mockSetRuleEnabled).not.toHaveBeenCalled();
+    expect(mockUpdateRuleActions).not.toHaveBeenCalled();
+  });
+
+  // The model has no second call that writes and no token to mint: repeating
+  // the call cannot apply the change, only re-propose it.
+  it("still writes nothing when the model calls it repeatedly", async () => {
+    const tool: any = updateRuleTool(options);
+
+    await tool.execute(disable);
+    const second: any = await tool.execute(disable);
+
+    expect(second.requiresConfirmation).toBe(true);
     expect(mockPartialUpdateRule).not.toHaveBeenCalled();
     expect(mockSetRuleEnabled).not.toHaveBeenCalled();
   });
 
-  it("applies the change when called again with that token", async () => {
-    const tool: any = updateRuleTool(options);
-    const first: any = await tool.execute(disable);
-    const second: any = await tool.execute({
-      ...disable,
-      approvalToken: first.approvalToken,
+  it("applies the change once approved", async () => {
+    await (updateRuleTool(options) as any).execute(disable);
+    expect(mockSetRuleEnabled).not.toHaveBeenCalled();
+
+    const applied = await applyApprovedRuleUpdate({
+      ruleName: "Vendor Billing",
+      updates: { enabled: false },
+      emailAccountId: "email-account-id",
+      provider: "google",
+      logger,
     });
 
-    expect(second.requiresApproval).toBeUndefined();
-    expect(mockSetRuleEnabled).toHaveBeenCalled();
+    expect(applied.ruleId).toBe("rule-id");
+    expect(mockSetRuleEnabled).toHaveBeenCalledWith(
+      expect.objectContaining({ ruleId: "rule-id", enabled: false }),
+    );
   });
 
-  it("rejects a token minted for a different change", async () => {
-    const tool: any = updateRuleTool(options);
-    const forDisable: any = await tool.execute(disable);
+  it("refuses to apply an approval for a rule that has since been deleted", async () => {
+    mockPrisma.rule.findUnique.mockResolvedValue(null);
 
-    // Approval for "disable this rule" must not authorise a rename.
-    const result: any = await tool.execute({
-      ruleName: "Vendor Billing",
-      updates: { name: "Renamed" },
-      approvalToken: forDisable.approvalToken,
-    });
-
-    expect(result.requiresApproval).toBe(true);
-    expect(mockPartialUpdateRule).not.toHaveBeenCalled();
-  });
-
-  it("mints the same token regardless of update key order", async () => {
-    const tool: any = updateRuleTool(options);
-    const a: any = await tool.execute({
-      ruleName: "Vendor Billing",
-      updates: { enabled: false, name: "Renamed" },
-    });
-    const b: any = await tool.execute({
-      ruleName: "Vendor Billing",
-      updates: { name: "Renamed", enabled: false },
-    });
-
-    expect(a.approvalToken).toBe(b.approvalToken);
+    await expect(
+      applyApprovedRuleUpdate({
+        ruleName: "Vendor Billing",
+        updates: { enabled: false },
+        emailAccountId: "email-account-id",
+        provider: "google",
+        logger,
+      }),
+    ).rejects.toThrow(/no longer exists/i);
+    expect(mockSetRuleEnabled).not.toHaveBeenCalled();
   });
 });
 
@@ -908,14 +912,23 @@ function approvingUpdateRuleTool(
 ) {
   const tool = updateRuleTool(options);
   return {
+    // Mirrors what the UI does: the tool proposes, the user approves, and the
+    // confirmation path applies it from the same arguments.
     // biome-ignore lint/suspicious/noExplicitAny: mirrors the tool's loose shape
     execute: async (args: any): Promise<any> => {
-      const first: any = await (tool as any).execute(args);
-      if (!first?.requiresApproval) return first;
-      return (tool as any).execute({
-        ...args,
-        approvalToken: first.approvalToken,
+      const proposal: any = await (tool as any).execute(args);
+      if (!proposal?.requiresConfirmation) return proposal;
+
+      const applied = await applyApprovedRuleUpdate({
+        ruleName: args.ruleName,
+        updates: args.updates,
+        emailAccountId: options.emailAccountId,
+        provider: options.provider,
+        logger: options.logger,
       });
+
+      const { requiresConfirmation, confirmationState, ...rest } = proposal;
+      return { ...rest, ...applied };
     },
   };
 }

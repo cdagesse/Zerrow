@@ -13,8 +13,10 @@ describe("assistant chat server action boundary", () => {
     expect(actions).toHaveProperty("confirmAssistantEmailAction");
     expect(actions).toHaveProperty("confirmAssistantCreateRule");
     expect(actions).toHaveProperty("confirmAssistantSaveMemory");
+    expect(actions).toHaveProperty("confirmAssistantUpdateRule");
     expect(actions).not.toHaveProperty("confirmAssistantEmailActionForAccount");
     expect(actions).not.toHaveProperty("confirmAssistantCreateRuleForAccount");
     expect(actions).not.toHaveProperty("confirmAssistantSaveMemoryForAccount");
+    expect(actions).not.toHaveProperty("confirmAssistantUpdateRuleForAccount");
   });
 });

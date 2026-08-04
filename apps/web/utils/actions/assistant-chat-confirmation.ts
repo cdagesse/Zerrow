@@ -18,6 +18,7 @@ import {
   pendingReplyEmailToolOutputSchema,
   pendingSaveMemoryToolOutputSchema,
   pendingSendEmailToolOutputSchema,
+  pendingUpdateRuleToolOutputSchema,
   type PendingForwardEmailToolOutput,
   type PendingReplyEmailToolOutput,
   type PendingSendEmailToolOutput,
@@ -27,6 +28,7 @@ import {
   type ChatCreateRuleToolInvocation,
 } from "@/utils/ai/assistant/tools/rules/shared";
 import { createRule } from "@/utils/rule/rule";
+import { applyApprovedRuleUpdate } from "@/utils/ai/assistant/tools/rules/update-rule-tool";
 
 const CONFIRMATION_IN_PROGRESS_ERROR =
   "Email action confirmation already in progress";
@@ -305,6 +307,123 @@ export async function confirmAssistantCreateRuleForAccount({
     confirmationState: "confirmed" as const,
     ruleId: rule.id,
     confirmationResult: { ruleId: rule.id, confirmedAt },
+  };
+}
+
+/**
+ * Applies a rule edit the user approved in chat. The update_rule tool never
+ * writes, so this is the only path from the assistant to a changed rule.
+ *
+ * The patch comes from the tool input this server persisted, never from the
+ * request: the client sends only which tool call it is approving.
+ */
+export async function confirmAssistantUpdateRuleForAccount({
+  chatId,
+  chatMessageId,
+  toolCallId,
+  waitForPersistence,
+  emailAccountId,
+  provider,
+  logger,
+}: {
+  chatId: string;
+  chatMessageId?: string;
+  toolCallId: string;
+  waitForPersistence?: boolean;
+  emailAccountId: string;
+  provider: string;
+  logger: Logger;
+}) {
+  const reservation = await reservePendingAssistantUpdateRule({
+    chatId,
+    chatMessageId,
+    toolCallId,
+    emailAccountId,
+    waitForPersistence,
+    logger,
+  });
+
+  if (reservation.status === "confirmed") {
+    return {
+      success: true,
+      confirmationState: "confirmed" as const,
+      ruleId: reservation.confirmationResult.ruleId,
+      confirmationResult: reservation.confirmationResult,
+    };
+  }
+
+  const toolInput = reservation.toolInput;
+  if (!isRecord(toolInput) || typeof toolInput.ruleName !== "string") {
+    throw new SafeError("Invalid update-rule tool input");
+  }
+
+  let applied: Awaited<ReturnType<typeof applyApprovedRuleUpdate>>;
+  try {
+    applied = await applyApprovedRuleUpdate({
+      ruleName: toolInput.ruleName,
+      // Validated by the tool's own input schema before it was persisted
+      updates: toolInput.updates as Parameters<
+        typeof applyApprovedRuleUpdate
+      >[0]["updates"],
+      emailAccountId,
+      provider,
+      logger,
+    });
+  } catch (error) {
+    await clearPendingPartProcessing({
+      chatMessageId: reservation.chatMessageId,
+      emailAccountId,
+      findPart: (parts) =>
+        findPendingAssistantUpdateRulePart({ parts, toolCallId }),
+    }).catch((processingError) => {
+      logger.error("Failed to clear processing state for update rule", {
+        error: processingError,
+      });
+    });
+    logger.error("Failed to confirm assistant update rule", { error });
+
+    if (isDuplicateError(error, "name")) {
+      throw new SafeError("Another rule already uses that name.");
+    }
+    throw new SafeError(
+      error instanceof Error ? error.message : "Failed to update rule",
+    );
+  }
+
+  const confirmedAt = new Date().toISOString();
+  const confirmationResult = {
+    ruleId: applied.ruleId,
+    updatedName: applied.updatedName,
+    confirmedAt,
+    alreadyApplied: applied.alreadyApplied,
+  };
+
+  try {
+    await persistConfirmedAssistantUpdateRulePart({
+      chatMessageId: reservation.chatMessageId,
+      emailAccountId,
+      toolCallId,
+      ruleName: reservation.output.ruleName,
+      confirmationResult,
+      logger,
+    });
+  } catch (persistError) {
+    logger.error("Failed to persist confirmed assistant update rule", {
+      error: persistError,
+      ruleId: applied.ruleId,
+    });
+    throw new SafeError(
+      "Rule was updated but confirmation state could not be saved. Please refresh and try again.",
+    );
+  }
+
+  return {
+    success: true,
+    confirmationState: "confirmed" as const,
+    ruleId: applied.ruleId,
+    preservedActionTypes: applied.preservedActionTypes,
+    currentRule: applied.currentRule,
+    confirmationResult,
   };
 }
 
@@ -589,6 +708,44 @@ async function confirmPendingForwardEmailAction({
 }
 
 const ASSISTANT_CREATE_RULE_TOOL_TYPE = "tool-createRule";
+const ASSISTANT_UPDATE_RULE_TOOL_TYPE = "tool-updateRule";
+
+function findPendingAssistantUpdateRulePart({
+  parts,
+  toolCallId,
+}: {
+  parts: unknown;
+  toolCallId: string;
+}) {
+  if (!Array.isArray(parts)) return null;
+
+  for (const [index, part] of parts.entries()) {
+    if (
+      !isRecord(part) ||
+      part.type !== ASSISTANT_UPDATE_RULE_TOOL_TYPE ||
+      part.toolCallId !== toolCallId
+    ) {
+      continue;
+    }
+
+    const parsed = pendingUpdateRuleToolOutputSchema.safeParse(part.output);
+    if (!parsed.success) continue;
+
+    const out = parsed.data;
+    if (!out.requiresConfirmation || out.actionType !== "update_rule") {
+      continue;
+    }
+
+    return {
+      index,
+      output: out,
+      parts,
+      toolInput: part.input,
+    };
+  }
+
+  return null;
+}
 
 function findPendingAssistantCreateRulePart({
   parts,
@@ -1563,6 +1720,186 @@ async function reservePendingAssistantCreateRule({
   }
 
   throw new SafeError(CONFIRMATION_IN_PROGRESS_ERROR);
+}
+
+async function reservePendingAssistantUpdateRule({
+  chatId,
+  chatMessageId,
+  toolCallId,
+  emailAccountId,
+  waitForPersistence,
+  logger,
+}: {
+  chatId: string;
+  chatMessageId?: string;
+  toolCallId: string;
+  emailAccountId: string;
+  waitForPersistence?: boolean;
+  logger: Logger;
+}) {
+  const matchUpdateRuleParts = (parts: unknown) =>
+    !!findPendingAssistantUpdateRulePart({ parts, toolCallId });
+  const waitForPersistenceMs = waitForPersistence
+    ? PENDING_ACTION_PERSIST_WAIT_MS
+    : undefined;
+  const logPrefix = "Assistant update rule confirmation";
+
+  const chatMessage = await findChatMessageForPendingAction({
+    chatId,
+    chatMessageId,
+    emailAccountId,
+    logger,
+    matchParts: matchUpdateRuleParts,
+    logPrefix,
+    waitForPersistenceMs,
+  });
+
+  if (!chatMessage) {
+    logger.warn(`${logPrefix}: chat message not found`, {
+      chatMessageId,
+      toolCallId,
+    });
+    throw new SafeError("Chat message not found");
+  }
+
+  const lookup = findPendingAssistantUpdateRulePart({
+    parts: chatMessage.parts,
+    toolCallId,
+  });
+
+  if (!lookup) {
+    logger.warn(`${logPrefix}: pending not found`, {
+      chatMessageId: chatMessage.id,
+      toolCallId,
+    });
+    throw new SafeError("Pending rule update not found");
+  }
+
+  // Approving twice must not write twice: a rule edit is not idempotent once
+  // the proposal is stale against the rule it already changed.
+  if (
+    lookup.output.confirmationState === "confirmed" &&
+    lookup.output.confirmationResult
+  ) {
+    return {
+      status: "confirmed" as const,
+      confirmationResult: lookup.output.confirmationResult,
+    };
+  }
+
+  if (
+    lookup.output.confirmationState === "processing" &&
+    !hasProcessingLeaseExpired(lookup.output.confirmationProcessingAt)
+  ) {
+    throw new SafeError(CONFIRMATION_IN_PROGRESS_ERROR);
+  }
+
+  const processingAt = new Date().toISOString();
+  const processingParts = updateAssistantEmailPartWithProcessing({
+    parts: lookup.parts,
+    partIndex: lookup.index,
+    processingAt,
+  });
+
+  const claim = await prisma.chatMessage.updateMany({
+    where: {
+      id: chatMessage.id,
+      chatId: chatMessage.chatId,
+      updatedAt: chatMessage.updatedAt,
+    },
+    data: {
+      parts: processingParts as Prisma.InputJsonValue,
+    },
+  });
+
+  if (claim.count === 1) {
+    return {
+      status: "reserved" as const,
+      chatMessageId: chatMessage.id,
+      output: lookup.output,
+      toolInput: lookup.toolInput,
+    };
+  }
+
+  // Lost the claim: another request is mid-flight, or already finished.
+  const latestMessage = await findChatMessageForPendingAction({
+    chatId,
+    chatMessageId,
+    emailAccountId,
+    logger,
+    matchParts: matchUpdateRuleParts,
+    logPrefix,
+    waitForPersistenceMs,
+  });
+
+  if (!latestMessage) throw new SafeError("Chat message not found");
+
+  const latestLookup = findPendingAssistantUpdateRulePart({
+    parts: latestMessage.parts,
+    toolCallId,
+  });
+
+  if (
+    latestLookup?.output.confirmationState === "confirmed" &&
+    latestLookup.output.confirmationResult
+  ) {
+    return {
+      status: "confirmed" as const,
+      confirmationResult: latestLookup.output.confirmationResult,
+    };
+  }
+
+  throw new SafeError(CONFIRMATION_IN_PROGRESS_ERROR);
+}
+
+async function persistConfirmedAssistantUpdateRulePart({
+  chatMessageId,
+  emailAccountId,
+  toolCallId,
+  ruleName,
+  confirmationResult,
+  logger,
+}: {
+  chatMessageId: string;
+  emailAccountId: string;
+  toolCallId: string;
+  ruleName: string;
+  confirmationResult: {
+    ruleId: string;
+    updatedName: string;
+    confirmedAt: string;
+    alreadyApplied?: boolean;
+  };
+  logger: Logger;
+}) {
+  await persistConfirmedAssistantPart({
+    chatMessageId,
+    emailAccountId,
+    logger: logger.with({
+      chatMessageId,
+      toolCallId,
+      ruleId: confirmationResult.ruleId,
+    }),
+    findPart: (parts) =>
+      findPendingAssistantUpdateRulePart({ parts, toolCallId }),
+    isConfirmed: (lookup) =>
+      lookup.output.confirmationState === "confirmed" &&
+      lookup.output.confirmationResult?.ruleId === confirmationResult.ruleId,
+    buildParts: ({ parts, partIndex }) =>
+      updateAssistantEmailPartOutput({
+        parts,
+        partIndex,
+        outputPatch: {
+          success: true,
+          actionType: "update_rule",
+          requiresConfirmation: true,
+          confirmationState: "confirmed",
+          ruleId: confirmationResult.ruleId,
+          ruleName,
+          confirmationResult,
+        },
+      }),
+  });
 }
 
 async function persistConfirmedAssistantCreateRulePart({
