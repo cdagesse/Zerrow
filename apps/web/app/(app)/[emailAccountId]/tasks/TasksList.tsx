@@ -700,7 +700,7 @@ function TaskRow({
     subtasks.length > 0 && doneSubtasks === subtasks.length;
   const showPriority =
     (task.priority === "HIGH" || task.priority === "URGENT") && open;
-  const mailCount = task.emails?.length ?? 0;
+  const mailCount = task._count.emails;
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the inner Open button is the keyboard path
@@ -853,7 +853,7 @@ function KanbanCard({
     subtasks.length > 0 && doneSubtasks === subtasks.length;
   const showPriority =
     (task.priority === "HIGH" || task.priority === "URGENT") && open;
-  const mailCount = task.emails?.length ?? 0;
+  const mailCount = task._count.emails;
 
   return (
     // biome-ignore lint/a11y/useKeyWithClickEvents: the row context menu and drawer cover keyboard flows

@@ -18,7 +18,10 @@ async function getTasks({ emailAccountId }: { emailAccountId: string }) {
     where: { emailAccountId },
     include: {
       activity: { orderBy: { createdAt: "desc" }, take: 50 },
-      emails: { orderBy: { createdAt: "desc" } },
+      // Count only. This response is warmed on every app navigation, so the
+      // linked emails themselves load per-task from /api/tasks/[taskId]
+      // instead of growing this payload without bound.
+      _count: { select: { emails: true } },
     },
     orderBy: [{ createdAt: "desc" }],
   });
