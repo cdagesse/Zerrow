@@ -89,6 +89,89 @@ describe("pullGoogleContacts", () => {
     });
   });
 
+  // A full re-sync (expired token, first pull) resends everyone unchanged.
+  // Writing those back would move Contact.updatedAt across the address book,
+  // and CardDAV etags plus the collection ctag are built from that timestamp —
+  // so every synced phone would be told all of these contacts had changed.
+  it("does not write a contact Google resent unchanged", async () => {
+    prisma.contact.findFirst.mockResolvedValue({
+      id: "contact-1",
+      name: "Ada Lovelace",
+      phones: [{ label: "Mobile", value: "+1 555 0100" }],
+      title: "Engineer",
+      photoUrl: "https://example.test/ada.jpg",
+      googleResourceName: "people/1",
+      googleEtag: "etag-1",
+    } as never);
+    connectionsList.mockResolvedValue({
+      data: {
+        connections: [
+          {
+            resourceName: "people/1",
+            etag: "etag-1",
+            names: [{ displayName: "Ada Lovelace" }],
+            emailAddresses: [{ value: "ada@example.test" }],
+            phoneNumbers: [{ type: "mobile", value: "+1 555 0100" }],
+            organizations: [{ title: "Engineer" }],
+            photos: [{ url: "https://example.test/ada.jpg" }],
+          },
+        ],
+        nextSyncToken: "fresh-token",
+      },
+    });
+
+    const result = await pullGoogleContacts({
+      emailAccountId: EMAIL_ACCOUNT_ID,
+      logger,
+    });
+
+    expect(prisma.contact.update).not.toHaveBeenCalled();
+    expect(result.unchanged).toBe(1);
+    expect(result.updated).toBe(0);
+  });
+
+  it("still writes when a field Google owns actually changed", async () => {
+    prisma.contact.findFirst.mockResolvedValue({
+      id: "contact-1",
+      name: "Ada Lovelace",
+      phones: [{ label: "Mobile", value: "+1 555 0100" }],
+      title: "Engineer",
+      photoUrl: null,
+      googleResourceName: "people/1",
+      googleEtag: "etag-1",
+    } as never);
+    prisma.contact.update.mockResolvedValue({} as never);
+    connectionsList.mockResolvedValue({
+      data: {
+        connections: [
+          {
+            resourceName: "people/1",
+            etag: "etag-2",
+            names: [{ displayName: "Ada Lovelace" }],
+            emailAddresses: [{ value: "ada@example.test" }],
+            phoneNumbers: [{ type: "mobile", value: "+1 555 0100" }],
+            organizations: [{ title: "Principal Engineer" }],
+          },
+        ],
+        nextSyncToken: "fresh-token",
+      },
+    });
+
+    const result = await pullGoogleContacts({
+      emailAccountId: EMAIL_ACCOUNT_ID,
+      logger,
+    });
+
+    expect(prisma.contact.update).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { id: "contact-1" },
+        data: expect.objectContaining({ title: "Principal Engineer" }),
+      }),
+    );
+    expect(result.updated).toBe(1);
+    expect(result.unchanged).toBe(0);
+  });
+
   it("saves the new token so the next incremental pull resumes", async () => {
     await pullGoogleContacts({
       emailAccountId: EMAIL_ACCOUNT_ID,

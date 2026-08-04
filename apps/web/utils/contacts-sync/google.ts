@@ -7,6 +7,7 @@ import {
   UPDATE_PERSON_FIELDS,
 } from "@/utils/contacts-sync/mappers";
 import type { ContactPhone } from "@/utils/contacts";
+import isEqual from "lodash/isEqual";
 import type { Logger } from "@/utils/logger";
 import { SafeError } from "@/utils/error";
 import prisma from "@/utils/prisma";
@@ -20,6 +21,12 @@ export type PullResult = {
   // People Google returned that carried nothing identifying. Counted so a
   // contact going missing is visible in the logs instead of silent.
   skipped: number;
+  // Contacts Google resent whose owned fields already matched, so no write
+  // was issued. Worth its own counter: every needless update moves
+  // Contact.updatedAt, which is the material CardDAV etags and the collection
+  // ctag are built from, so a no-op write tells every synced device that all
+  // of these contacts changed.
+  unchanged: number;
 };
 
 // Pulls Google Contacts into Contact rows. Incremental when a sync token is
@@ -173,7 +180,13 @@ async function pullWithToken({
   syncToken: string | null;
   logger: Logger;
 }): Promise<PullResult> {
-  const result: PullResult = { created: 0, updated: 0, deleted: 0, skipped: 0 };
+  const result: PullResult = {
+    created: 0,
+    updated: 0,
+    deleted: 0,
+    skipped: 0,
+    unchanged: 0,
+  };
   let pageToken: string | undefined;
   let nextSyncToken: string | null = null;
 
@@ -211,14 +224,14 @@ async function pullWithToken({
       const existing =
         (await prisma.contact.findFirst({
           where: { emailAccountId, googleResourceName: mapped.resourceName },
-          select: { id: true },
+          select: COMPARABLE_GOOGLE_FIELDS,
         })) ??
         (mapped.email
           ? await prisma.contact.findUnique({
               where: {
                 emailAccountId_email: { emailAccountId, email: mapped.email },
               },
-              select: { id: true },
+              select: COMPARABLE_GOOGLE_FIELDS,
             })
           : null);
 
@@ -234,6 +247,14 @@ async function pullWithToken({
       };
 
       if (existing) {
+        // Google resends unchanged people on any full re-sync (an expired
+        // sync token, a first pull), and writing them back would bump
+        // updatedAt on the whole address book.
+        if (googleFieldsAlreadyMatch(existing, googleFields)) {
+          result.unchanged += 1;
+          continue;
+        }
+
         await prisma.contact.update({
           where: { id: existing.id },
           data: googleFields,
@@ -317,4 +338,31 @@ function translateGoogleError(error: unknown): unknown {
     );
   }
   return error;
+}
+
+const COMPARABLE_GOOGLE_FIELDS = {
+  id: true,
+  name: true,
+  phones: true,
+  title: true,
+  photoUrl: true,
+  googleResourceName: true,
+  googleEtag: true,
+} as const;
+
+/**
+ * Whether every field this pull would write already holds that value.
+ *
+ * Only the keys present in `googleFields` are compared, which matters for
+ * photoUrl: it is omitted when Google sends no photo, and omitting it means
+ * "keep what we have" rather than "clear it".
+ */
+function googleFieldsAlreadyMatch(
+  existing: Record<string, unknown>,
+  googleFields: Record<string, unknown>,
+) {
+  return Object.entries(googleFields).every(([field, value]) =>
+    // phones is a JSON column, so identity is not enough
+    isEqual(existing[field] ?? null, value ?? null),
+  );
 }
