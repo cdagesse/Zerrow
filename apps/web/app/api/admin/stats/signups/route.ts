@@ -1,4 +1,5 @@
 import prisma from "@/utils/prisma";
+import { isDefined } from "@/utils/types";
 import { buildDailySeries, type DayCount } from "../daily-series";
 import type { AdminStatsParams } from "../types";
 import { createAdminStatsRoute, resolveDateRange } from "../utils";
@@ -30,5 +31,29 @@ async function getSignups(params: AdminStatsParams) {
     `,
   ]);
 
-  return { result: buildDailySeries({ from, to, users, mailboxes }) };
+  // "All time" sends no lower bound, so `from` is the epoch, and a dense series
+  // from there is twenty thousand zero-filled days ahead of the product's first
+  // signup: a huge response, and a chart whose bars vanish beside all that empty
+  // history. The first day holding a signup is the honest left edge there. A
+  // bound the caller did pick is kept as-is, so a quiet week still reads as
+  // zeroes instead of silently narrowing to the days that have data.
+  const seriesFrom = isDefined(params.fromDate)
+    ? from
+    : firstDayWithSignup(users, mailboxes);
+
+  return {
+    result: seriesFrom
+      ? buildDailySeries({ from: seriesFrom, to, users, mailboxes })
+      : [],
+  };
+}
+
+/** Earliest UTC day holding a signup, or null when the window holds none. */
+function firstDayWithSignup(users: DayCount[], mailboxes: DayCount[]) {
+  // Both queries order by day, so only each series' first row can be earliest,
+  // and `YYYY-MM-DD` compares chronologically as a string.
+  const firstDays = [users[0]?.day, mailboxes[0]?.day].filter(isDefined).sort();
+  const earliest = firstDays[0];
+
+  return earliest ? new Date(`${earliest}T00:00:00.000Z`) : null;
 }

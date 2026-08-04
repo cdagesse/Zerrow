@@ -62,15 +62,31 @@ describe("submitContactCardExchange", () => {
     expect(prisma.contactCardExchange.create).not.toHaveBeenCalled();
   });
 
-  // Both a per-visitor and a per-card limit, so one card can't be flooded
+  // A per-IP, a per-visitor and a per-card limit, so one card can't be flooded
   // from many addresses either
-  it("checks a per-visitor and a per-card limit", async () => {
+  it("checks a per-IP, a per-visitor and a per-card limit", async () => {
     await submit();
 
-    expect(checkRateLimit).toHaveBeenCalledTimes(2);
+    expect(checkRateLimit).toHaveBeenCalledTimes(3);
     const keys = checkRateLimit.mock.calls.map((call) => call[0].rule.key);
     expect(keys[0]).toContain("203.0.113.7");
-    expect(keys[1]).toContain("card-1");
+    expect(keys[1]).toContain("chris");
+    expect(keys[2]).toContain("card-1");
+  });
+
+  // The per-visitor and per-card limits need a resolved card, so a flood at
+  // slugs that don't exist would reach the database on every request
+  it("rate limits per IP before looking the card up", async () => {
+    checkRateLimit.mockResolvedValue({
+      limited: true,
+      retryAfterSeconds: 3600,
+    });
+
+    await expect(submit({ slug: "nobody" })).rejects.toThrow(
+      "Too many submissions",
+    );
+    expect(checkRateLimit).toHaveBeenCalledTimes(1);
+    expect(prisma.contactCard.findFirst).not.toHaveBeenCalled();
   });
 
   it("404s an unknown or inactive card without writing", async () => {
@@ -92,17 +108,19 @@ describe("submitContactCardExchange", () => {
   });
 });
 
-function submit(
-  overrides: Partial<{
-    name: string;
-    email: string;
-    phone: string;
-    companyTitle: string;
-    note: string;
-  }> = {},
-) {
+function submit({
+  slug = "chris",
+  ...overrides
+}: Partial<{
+  slug: string;
+  name: string;
+  email: string;
+  phone: string;
+  companyTitle: string;
+  note: string;
+}> = {}) {
   return submitContactCardExchange({
-    slug: "chris",
+    slug,
     submission: {
       name: "Jane Rivera",
       email: "jane@company.com",
