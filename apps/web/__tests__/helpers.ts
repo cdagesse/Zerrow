@@ -301,6 +301,7 @@ export function getRule(
     fromExclude: false,
     subject: null,
     subjectMatchMode: "CONTAINS" as const,
+    subjectMatchScope: "ANY" as const,
     subjectExclude: false,
     body: null,
     to: null,

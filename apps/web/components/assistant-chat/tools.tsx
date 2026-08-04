@@ -1524,8 +1524,12 @@ export function PendingUpdateRuleToolCard({
   const ruleName = output.ruleName || args.ruleName;
   const isProcessing = output.confirmationState === "processing";
 
-  const nameChange = proposed.name &&
-    proposed.name !== ruleName && { from: ruleName, to: proposed.name };
+  // A ternary, not `&&`: the chained form widens to false | "" | {…}, so
+  // reading .to off it does not typecheck.
+  const nameChange =
+    proposed.name && proposed.name !== ruleName
+      ? { from: ruleName, to: proposed.name }
+      : null;
   const enabledChange =
     proposed.enabled !== undefined &&
     proposed.enabled !== output.originalEnabled
