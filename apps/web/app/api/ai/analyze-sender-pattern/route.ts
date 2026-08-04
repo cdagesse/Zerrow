@@ -28,10 +28,10 @@ export const POST = withError(
     let logger = request.logger;
 
     if (!isValidInternalApiKey(await headers(), logger)) {
-      // Never spread an unauthenticated caller's body into logs
-      logger.error("Invalid API key for sender pattern analysis", {
-        emailAccountId: json?.emailAccountId,
-      });
+      // Nothing from an unauthenticated caller's body reaches the logs — the
+      // identifiers in it are unverified, and isValidInternalApiKey has already
+      // logged the request and header diagnostics
+      logger.error("Invalid API key for sender pattern analysis");
       return NextResponse.json({ error: "Invalid API key" }, { status: 401 });
     }
 

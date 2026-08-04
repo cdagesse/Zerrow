@@ -10,9 +10,11 @@ import {
 } from "@/utils/rate-limit";
 
 // Anyone with the link can post here, so the limits are deliberately tight —
-// a real person swapping details submits once. Both limits must pass: the
-// per-visitor one stops one person spamming, the per-card one stops a
-// distributed flood filling someone's review list.
+// a real person swapping details submits once. Every limit must pass: the
+// coarse per-IP one stops a flood before it reaches the database, the
+// per-visitor one stops one person spamming a card, and the per-card one stops
+// a distributed flood filling someone's review list.
+const PER_IP_LIMIT = { limit: 20, windowSeconds: 60 * 60 };
 const PER_VISITOR_LIMIT = { limit: 5, windowSeconds: 60 * 60 };
 const PER_CARD_LIMIT = { limit: 40, windowSeconds: 60 * 60 };
 
@@ -27,6 +29,21 @@ export async function submitContactCardExchange({
   headers: Headers;
   logger: Logger;
 }): Promise<{ received: true }> {
+  const clientIp = getClientIp(headers);
+
+  // Ahead of the lookup: the other two limits need a resolved card, so posts to
+  // slugs that don't exist would otherwise hit the database unthrottled
+  await enforceRateLimits({
+    rules: [
+      {
+        key: createRateLimitKey(["contact-card-exchange-ip", clientIp]),
+        ...PER_IP_LIMIT,
+      },
+    ],
+    slug,
+    logger,
+  });
+
   const card = await prisma.contactCard.findFirst({
     where: { slug, isActive: true },
     select: { id: true },
@@ -34,7 +51,20 @@ export async function submitContactCardExchange({
   // Same response either way: whether a slug exists isn't worth leaking
   if (!card) throw new SafeError("Card not found", 404);
 
-  await enforceRateLimits({ slug, cardId: card.id, headers, logger });
+  await enforceRateLimits({
+    rules: [
+      {
+        key: createRateLimitKey(["contact-card-exchange", slug, clientIp]),
+        ...PER_VISITOR_LIMIT,
+      },
+      {
+        key: createRateLimitKey(["contact-card-exchange-card", card.id]),
+        ...PER_CARD_LIMIT,
+      },
+    ],
+    slug,
+    logger,
+  });
 
   await prisma.contactCardExchange.create({
     data: {
@@ -79,31 +109,14 @@ export type PendingExchange = Awaited<
 >[number];
 
 async function enforceRateLimits({
+  rules,
   slug,
-  cardId,
-  headers,
   logger,
 }: {
+  rules: { key: string; limit: number; windowSeconds: number }[];
   slug: string;
-  cardId: string;
-  headers: Headers;
   logger: Logger;
 }) {
-  const rules = [
-    {
-      key: createRateLimitKey([
-        "contact-card-exchange",
-        slug,
-        getClientIp(headers),
-      ]),
-      ...PER_VISITOR_LIMIT,
-    },
-    {
-      key: createRateLimitKey(["contact-card-exchange-card", cardId]),
-      ...PER_CARD_LIMIT,
-    },
-  ];
-
   for (const rule of rules) {
     const result = await checkRateLimit({ rule, logger });
     if (result.limited) {

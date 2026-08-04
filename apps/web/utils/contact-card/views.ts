@@ -1,4 +1,4 @@
-import { startOfDay, subDays } from "date-fns";
+import { min, startOfDay, subDays } from "date-fns";
 import type { Logger } from "@/utils/logger";
 import prisma from "@/utils/prisma";
 import { isDuplicateError } from "@/utils/prisma-helpers";
@@ -166,10 +166,14 @@ export async function getContactCardEngagement(
   const windowStart = startOfDay(subDays(now, WINDOW_DAYS - 1));
   const previousStart = startOfDay(subDays(now, WINDOW_DAYS * 2 - 1));
   const trendStart = startOfDay(subDays(now, TREND_WEEKS * 7 - 1));
+  // The delta compares the last 30 days with the 30 before, which reaches
+  // further back than the weekly trend — fetching only the trend window would
+  // undercount the prior period and make every delta read as growth
+  const viewsStart = min([previousStart, trendStart]);
 
   const [viewRows, clickRows, lastView, referrers] = await Promise.all([
     prisma.contactCardView.findMany({
-      where: { contactCardId, day: { gte: trendStart } },
+      where: { contactCardId, day: { gte: viewsStart } },
       select: { day: true },
     }),
     prisma.contactCardClick.findMany({

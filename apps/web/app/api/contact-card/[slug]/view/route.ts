@@ -15,8 +15,15 @@ export const POST = withError("contact-card-view", async (request, context) => {
 
   const limited = await checkRateLimit({
     rule: {
+      // Scoped per card, not per visitor alone: one bucket for every card
+      // means a shared-NAT office — or 60 pings at slugs that don't exist —
+      // silently stops counting real views of unrelated cards. A caller
+      // walking many slugs does get more requests in total this way, but each
+      // one is a single indexed lookup and its writes are still capped per
+      // card per day by the view dedupe, so undercounting is the worse trade.
       key: createRateLimitKey([
         "contact-card-view",
+        slug,
         getClientIp(request.headers),
       ]),
       limit: 60,

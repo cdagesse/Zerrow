@@ -1,8 +1,9 @@
+import { startOfDay, subDays } from "date-fns";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createTestLogger } from "@/__tests__/helpers";
 import { Prisma } from "@/generated/prisma/client";
 import prisma from "@/utils/__mocks__/prisma";
-import { recordContactCardView } from "./views";
+import { getContactCardEngagement, recordContactCardView } from "./views";
 
 vi.mock("@/utils/prisma");
 
@@ -104,6 +105,38 @@ describe("recordContactCardView", () => {
     expect(prisma.contactCardView.create).not.toHaveBeenCalled();
   });
 });
+
+describe("getContactCardEngagement", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prisma.contactCardClick.findMany.mockResolvedValue([] as never);
+    prisma.contactCardView.findFirst.mockResolvedValue(null as never);
+    prisma.contactCardView.groupBy.mockResolvedValue([] as never);
+    // Stands in for the day filter so the fetched range is what's under test
+    prisma.contactCardView.findMany.mockImplementation((async (args: {
+      where: { day: { gte: Date } };
+    }) =>
+      dailyViewsForDaysBack(60).filter(
+        (row) => row.day >= args.where.day.gte,
+      )) as never);
+  });
+
+  // The panel compares two 30-day windows, so the prior one must be fetched in
+  // full — a short range makes flat traffic look like growth
+  it("compares against a fully counted prior 30 days", async () => {
+    const engagement = await getContactCardEngagement("card-1");
+
+    expect(engagement.views.total).toBe(30);
+    expect(engagement.views.deltaPct).toBe(0);
+  });
+});
+
+// One view per day, most recent first, going `days` days back
+function dailyViewsForDaysBack(days: number) {
+  return Array.from({ length: days }, (_, index) => ({
+    day: startOfDay(subDays(new Date(), index)),
+  }));
+}
 
 function viewHeaders({
   ip = "203.0.113.7",

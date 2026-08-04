@@ -9,7 +9,12 @@ export const POST = withError(
   "contact-card-exchange",
   async (request, context) => {
     const { slug } = await context.params;
-    const submission = contactCardExchangeBody.parse(await request.json());
+    // A body that isn't JSON is the caller's mistake: hand Zod null so the
+    // middleware answers 400, rather than letting the parse error become a 500
+    // and unhandled-error telemetry
+    const submission = contactCardExchangeBody.parse(
+      await request.json().catch(() => null),
+    );
 
     const result = await submitContactCardExchange({
       slug,
