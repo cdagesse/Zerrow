@@ -978,6 +978,7 @@ function getRule(): Rule {
     to: null,
     subject: null,
     subjectMatchMode: "CONTAINS" as const,
+    subjectMatchScope: "ANY" as const,
     body: null,
     groupId: null,
     conditionalOperator: "AND",
