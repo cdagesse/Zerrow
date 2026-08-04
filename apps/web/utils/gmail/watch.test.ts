@@ -79,26 +79,23 @@ describe("watchGmail", () => {
     });
   });
 
-  it("allows intentionally-empty verification tokens", async () => {
+  // A blank token used to register the watch happily, while the webhook
+  // rejects one — so the subscription existed and every delivery 503'd, which
+  // presents as mail quietly stopping with nothing blaming configuration.
+  it("refuses to register a watch on a blank verification token", async () => {
     envMock.GOOGLE_PUBSUB_VERIFICATION_TOKEN = "";
-    const stopMock = vi.fn().mockResolvedValue({});
-    const watchMock = vi.fn().mockResolvedValue({
-      data: { expiration: "123" },
-    });
+    const watchMock = vi.fn();
     const gmail = {
       users: {
-        stop: stopMock,
         watch: watchMock,
       },
     } as any;
 
-    await expect(watchGmail(gmail)).resolves.toEqual({
-      expiration: "123",
-    });
+    await expect(watchGmail(gmail)).rejects.toThrow(
+      "GOOGLE_PUBSUB_VERIFICATION_TOKEN is required to watch Gmail",
+    );
 
-    expect(withGmailRetryMock).toHaveBeenCalledTimes(1);
-    expect(stopMock).not.toHaveBeenCalled();
-    expect(watchMock).toHaveBeenCalledTimes(1);
+    expect(watchMock).not.toHaveBeenCalled();
   });
 
   it("stops the existing Gmail watch and retries when another push client blocks setup", async () => {
