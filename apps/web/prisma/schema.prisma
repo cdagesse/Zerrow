@@ -580,6 +580,11 @@ model Rule {
   excludeKnownContacts Boolean            @default(false)
   // How the subject condition matches: substring anywhere, or anchored at the start
   subjectMatchMode     SubjectMatchMode   @default(CONTAINS)
+  // Which messages the subject condition applies to. Reply prefixes are
+  // stripped from both pattern and subject so a topic rule catches the whole
+  // conversation, which is right by default and wrong when the user wants only
+  // the reply or only the opening message.
+  subjectMatchScope    SubjectMatchScope  @default(ANY)
 
   emailAccountId String
   emailAccount   EmailAccount @relation(fields: [emailAccountId], references: [id], onDelete: Cascade)
@@ -694,6 +699,7 @@ model RuleHistory {
   toExclude            Boolean @default(false)
   subject              String?
   subjectMatchMode     String  @default("CONTAINS")
+  subjectMatchScope    String  @default("ANY")
   subjectExclude       Boolean @default(false)
   body                 String?
   excludeKnownContacts Boolean @default(false)
@@ -2397,4 +2403,10 @@ enum AutomationJobRunStatus {
 enum SubjectMatchMode {
   CONTAINS
   STARTS_WITH
+}
+
+enum SubjectMatchScope {
+  ANY
+  REPLIES
+  ORIGINALS
 }

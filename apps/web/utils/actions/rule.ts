@@ -27,6 +27,7 @@ import {
   ActionType,
   SystemType,
   SubjectMatchMode,
+  SubjectMatchScope,
 } from "@/generated/prisma/enums";
 import { sanitizeActionFields } from "@/utils/action-item";
 import {
@@ -112,6 +113,8 @@ export const createRuleAction = actionClient
           runOnThreads: runOnThreads ?? true,
           subjectMatchMode:
             conditions.subjectMatchMode ?? SubjectMatchMode.CONTAINS,
+          subjectMatchScope:
+            conditions.subjectMatchScope ?? SubjectMatchScope.ANY,
           staticExcludes: {
             fromExclude: conditions.fromExclude ?? false,
             toExclude: conditions.toExclude ?? false,
@@ -184,6 +187,8 @@ export const updateRuleAction = actionClient
           runOnThreads: runOnThreads ?? undefined,
           subjectMatchMode:
             conditions.subjectMatchMode ?? SubjectMatchMode.CONTAINS,
+          subjectMatchScope:
+            conditions.subjectMatchScope ?? SubjectMatchScope.ANY,
           staticExcludes: {
             fromExclude: conditions.fromExclude ?? false,
             toExclude: conditions.toExclude ?? false,

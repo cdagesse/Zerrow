@@ -619,6 +619,86 @@ describe("matchesStaticRule", () => {
     expect(matchesStaticRule(rule, message, logger)).toBe(true);
   });
 
+  // The default strips prefixes from both sides so a topic rule catches the
+  // whole conversation. That is right until the user wants one side of it, and
+  // until now there was no way to say so: a reply landing on the original's
+  // rule looked like a misroute with no setting to correct it.
+  describe("subject match scope", () => {
+    const cases = [
+      { scope: "REPLIES", subject: "Re: Travel Rate", matches: true },
+      { scope: "REPLIES", subject: "RE: RE: Travel Rate", matches: true },
+      { scope: "REPLIES", subject: "Fwd: Travel Rate", matches: true },
+      { scope: "REPLIES", subject: "Travel Rate", matches: false },
+      { scope: "ORIGINALS", subject: "Travel Rate", matches: true },
+      { scope: "ORIGINALS", subject: "Re: Travel Rate", matches: false },
+      { scope: "ORIGINALS", subject: "Fw: Travel Rate", matches: false },
+      { scope: "ANY", subject: "Travel Rate", matches: true },
+      { scope: "ANY", subject: "Re: Travel Rate", matches: true },
+    ] as const;
+
+    for (const { scope, subject, matches } of cases) {
+      it(`${scope}: ${matches ? "matches" : "skips"} "${subject}"`, () => {
+        const rule = getStaticRule({
+          subject: "Travel Rate",
+          subjectMatchScope: scope,
+        });
+
+        expect(
+          matchesStaticRule(
+            rule,
+            getMessage({ headers: getHeaders({ subject }) }),
+            logger,
+          ),
+        ).toBe(matches);
+      });
+    }
+
+    it("defaults to matching both when no scope is stored", () => {
+      const rule = getStaticRule({ subject: "Travel Rate" });
+
+      for (const subject of ["Travel Rate", "Re: Travel Rate"]) {
+        expect(
+          matchesStaticRule(
+            rule,
+            getMessage({ headers: getHeaders({ subject }) }),
+            logger,
+          ),
+        ).toBe(true);
+      }
+    });
+
+    // "is not X, replies only" scopes the rule to replies and then negates
+    // within them. Negating an out-of-scope message would match every original
+    // instead, which is the opposite of what the user asked for.
+    it("skips out-of-scope messages rather than negating them", () => {
+      const rule = getStaticRule({
+        subject: "Travel Rate",
+        subjectExclude: true,
+        subjectMatchScope: "REPLIES",
+      });
+
+      // In scope and does not match the pattern -> the exclusion fires
+      expect(
+        matchesStaticRule(
+          rule,
+          getMessage({
+            headers: getHeaders({ subject: "Re: Something else" }),
+          }),
+          logger,
+        ),
+      ).toBe(true);
+
+      // Out of scope entirely -> no match, despite being "not Travel Rate"
+      expect(
+        matchesStaticRule(
+          rule,
+          getMessage({ headers: getHeaders({ subject: "Something else" }) }),
+          logger,
+        ),
+      ).toBe(false);
+    });
+  });
+
   it("matches a pattern that itself includes a reply prefix", () => {
     // The user typed the condition from what they saw in their mailbox
     const rule = getStaticRule({

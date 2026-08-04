@@ -12,6 +12,19 @@ const MODULE = "match-patterns";
 // catch "Re: Daily Report")
 const REPLY_PREFIX_REGEX = /^(?:\s*(?:re|fwd?)(?:\[\d+\])?:\s*)+/i;
 
+/**
+ * Whether the subject carries a reply or forward marker.
+ *
+ * Deliberately textual rather than positional: a rule scoped to replies is
+ * about what the user sees in the subject line, and thread position is not
+ * available everywhere subjects are matched (rule testing, single messages
+ * fetched outside a thread). A reply that arrives with no marker at all reads
+ * as an original here, which matches how it reads to the user.
+ */
+export function hasReplyPrefix(subject: string): boolean {
+  return REPLY_PREFIX_REGEX.test(subject);
+}
+
 export function matchesTextPattern(
   pattern: string,
   text: string,

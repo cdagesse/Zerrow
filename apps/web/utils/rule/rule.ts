@@ -3,7 +3,10 @@ import { after } from "next/server";
 import prisma from "@/utils/prisma";
 import type { Logger } from "@/utils/logger";
 import { ActionType, SystemType } from "@/generated/prisma/enums";
-import type { SubjectMatchMode } from "@/generated/prisma/enums";
+import type {
+  SubjectMatchMode,
+  SubjectMatchScope,
+} from "@/generated/prisma/enums";
 import type { Prisma, Rule } from "@/generated/prisma/client";
 import { getActionRiskLevel, type RiskAction } from "@/utils/risk";
 import { hasExampleParams } from "@/app/(app)/[emailAccountId]/assistant/examples";
@@ -128,6 +131,7 @@ type RuleRecordData = {
   toExclude?: boolean;
   subject?: string | null;
   subjectMatchMode?: SubjectMatchMode | null;
+  subjectMatchScope?: SubjectMatchScope | null;
   subjectExclude?: boolean;
   body?: string | null;
   groupId?: string | null;
@@ -297,6 +301,7 @@ export async function createRuleWithResolvedActions({
       toExclude: data.toExclude ?? undefined,
       subject: data.subject ?? undefined,
       subjectMatchMode: data.subjectMatchMode ?? undefined,
+      subjectMatchScope: data.subjectMatchScope ?? undefined,
       subjectExclude: data.subjectExclude ?? undefined,
       body: data.body ?? undefined,
       groupId: data.groupId ?? undefined,
@@ -366,6 +371,7 @@ export async function replaceRuleWithResolvedActions({
       toExclude: data.toExclude ?? undefined,
       subject: data.subject,
       subjectMatchMode: data.subjectMatchMode ?? undefined,
+      subjectMatchScope: data.subjectMatchScope ?? undefined,
       subjectExclude: data.subjectExclude ?? undefined,
       body: data.body,
       groupId: data.groupId,
@@ -395,6 +401,7 @@ export async function createRule({
   provider,
   runOnThreads,
   subjectMatchMode,
+  subjectMatchScope,
   staticExcludes,
   logger,
   enablement = { source: "default" } satisfies CreateRuleEnablement,
@@ -405,6 +412,7 @@ export async function createRule({
   provider: string;
   runOnThreads: boolean;
   subjectMatchMode?: SubjectMatchMode | null;
+  subjectMatchScope?: SubjectMatchScope | null;
   staticExcludes?: StaticExcludes;
   logger: Logger;
   enablement?: CreateRuleEnablement;
@@ -462,6 +470,7 @@ export async function createRule({
         to: result.condition.static?.to,
         subject: result.condition.static?.subject,
         subjectMatchMode,
+        subjectMatchScope,
         ...staticExcludes,
       },
       actions: mappedActions,
@@ -485,6 +494,7 @@ export async function updateRule({
   logger,
   runOnThreads,
   subjectMatchMode,
+  subjectMatchScope,
   staticExcludes,
 }: {
   ruleId: string;
@@ -494,6 +504,7 @@ export async function updateRule({
   logger: Logger;
   runOnThreads?: boolean;
   subjectMatchMode?: SubjectMatchMode | null;
+  subjectMatchScope?: SubjectMatchScope | null;
   staticExcludes?: StaticExcludes;
 }) {
   try {
@@ -525,6 +536,7 @@ export async function updateRule({
         to: result.condition.static?.to,
         subject: result.condition.static?.subject,
         ...(subjectMatchMode !== undefined && { subjectMatchMode }),
+        ...(subjectMatchScope !== undefined && { subjectMatchScope }),
         ...(runOnThreads !== undefined && { runOnThreads }),
         ...staticExcludes,
       },

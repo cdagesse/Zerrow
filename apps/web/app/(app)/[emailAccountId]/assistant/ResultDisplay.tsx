@@ -336,6 +336,7 @@ function PrettyConditions({
     | "toExclude"
     | "subjectExclude"
     | "subjectMatchMode"
+    | "subjectMatchScope"
   >;
 }) {
   // Described by the shared formatter. Hand-rolling this dropped the exclusion

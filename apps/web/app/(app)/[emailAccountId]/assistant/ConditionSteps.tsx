@@ -7,7 +7,11 @@ import type { FieldError, FieldErrors } from "react-hook-form";
 import { useEffect } from "react";
 import { Input, Label, ErrorMessage } from "@/components/Input";
 import { toastError } from "@/components/Toast";
-import { LogicalOperator, SubjectMatchMode } from "@/generated/prisma/enums";
+import {
+  LogicalOperator,
+  SubjectMatchMode,
+  SubjectMatchScope,
+} from "@/generated/prisma/enums";
 import { ConditionType } from "@/utils/config";
 import { isConversationStatusType } from "@/utils/reply-tracker/conversation-status-config";
 import type {
@@ -553,9 +557,38 @@ export function ConditionSteps({
                           />
                         </div>
                       </div>
+                      <Select
+                        value={
+                          currentCondition?.subjectMatchScope ??
+                          SubjectMatchScope.ANY
+                        }
+                        onValueChange={(value) =>
+                          setValue(
+                            `conditions.${index}.subjectMatchScope`,
+                            value as SubjectMatchScope,
+                          )
+                        }
+                      >
+                        <SelectTrigger className="w-[170px] shrink-0">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value={SubjectMatchScope.ANY}>
+                            Replies and originals
+                          </SelectItem>
+                          <SelectItem value={SubjectMatchScope.REPLIES}>
+                            Replies only
+                          </SelectItem>
+                          <SelectItem value={SubjectMatchScope.ORIGINALS}>
+                            Originals only
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
                       <p className="w-full text-xs text-muted-foreground">
                         Several subjects can share one rule — separate them with
-                        ||, e.g. Daily Report || Weekly Summary
+                        ||, e.g. Daily Report || Weekly Summary. Reply markers
+                        are ignored when comparing, so a subject rule catches
+                        the whole conversation unless you narrow it above.
                       </p>
                     </div>
                   );

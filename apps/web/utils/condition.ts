@@ -1,4 +1,8 @@
-import { LogicalOperator, SubjectMatchMode } from "@/generated/prisma/enums";
+import {
+  LogicalOperator,
+  SubjectMatchMode,
+  SubjectMatchScope,
+} from "@/generated/prisma/enums";
 import type { Rule } from "@/generated/prisma/client";
 import { ConditionType, type CoreConditionType } from "@/utils/config";
 import type {
@@ -16,6 +20,7 @@ export type RuleConditions = Partial<
     | "to"
     | "subject"
     | "subjectMatchMode"
+    | "subjectMatchScope"
     | "body"
     | "conditionalOperator"
     | "fromExclude"
@@ -88,6 +93,7 @@ export function getConditions(rule: RuleConditions) {
         to: null,
         subject: rule.subject,
         subjectMatchMode: rule.subjectMatchMode ?? null,
+        subjectMatchScope: rule.subjectMatchScope ?? null,
         subjectExclude: rule.subjectExclude ?? false,
         body: null,
         instructions: null,
@@ -152,6 +158,7 @@ type FlattenedConditions = {
   toExclude?: boolean;
   subject?: string | null;
   subjectMatchMode?: SubjectMatchMode | null;
+  subjectMatchScope?: SubjectMatchScope | null;
   subjectExclude?: boolean;
   body?: string | null;
 };
@@ -180,6 +187,8 @@ export const flattenConditions = (
         }
         if (condition.subjectMatchMode)
           acc.subjectMatchMode = condition.subjectMatchMode;
+        if (condition.subjectMatchScope)
+          acc.subjectMatchScope = condition.subjectMatchScope;
         if (condition.body) acc.body = condition.body;
         break;
       default:
@@ -248,9 +257,10 @@ type DescribableRule = Pick<
   | "toExclude"
   | "subjectExclude"
 > & {
-  // RuleHistory snapshots store the mode as a plain string column, and this
+  // RuleHistory snapshots store these as plain string columns, and this
   // describer serves those too -- only equality is checked, so string is fine
   subjectMatchMode?: SubjectMatchMode | string | null;
+  subjectMatchScope?: SubjectMatchScope | string | null;
 };
 
 /**
@@ -328,10 +338,22 @@ export function conditionsToString(rule: RuleConditions) {
 }
 
 function subjectLabel(rule: DescribableRule) {
-  if (rule.subjectExclude) return "Subject doesn't contain";
-  return rule.subjectMatchMode === SubjectMatchMode.STARTS_WITH
-    ? "Subject starts with"
-    : "Subject contains";
+  const base = rule.subjectExclude
+    ? "Subject doesn't contain"
+    : rule.subjectMatchMode === SubjectMatchMode.STARTS_WITH
+      ? "Subject starts with"
+      : "Subject contains";
+  return `${base}${subjectScopeSuffix(rule.subjectMatchScope)}`;
+}
+
+// Reads as part of the condition rather than a separate line, because it
+// narrows that one condition and nothing else about the rule.
+function subjectScopeSuffix(
+  scope: SubjectMatchScope | string | null | undefined,
+) {
+  if (scope === SubjectMatchScope.REPLIES) return " (replies only)";
+  if (scope === SubjectMatchScope.ORIGINALS) return " (originals only)";
+  return "";
 }
 
 function describe(

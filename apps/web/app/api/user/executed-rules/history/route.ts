@@ -82,6 +82,7 @@ async function getExecutedRules({
             toExclude: true,
             subjectExclude: true,
             subjectMatchMode: true,
+            subjectMatchScope: true,
             group: { select: { name: true } },
           },
         },

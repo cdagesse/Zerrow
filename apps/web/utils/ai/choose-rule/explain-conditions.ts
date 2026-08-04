@@ -1,6 +1,7 @@
 import {
   LogicalOperator,
   type SubjectMatchMode,
+  SubjectMatchScope,
 } from "@/generated/prisma/enums";
 import { ConditionType } from "@/utils/config";
 import { getConditionTypes } from "@/utils/condition";
@@ -66,6 +67,7 @@ export function explainRuleMatch({
     groupId: string | null;
     conditionalOperator: LogicalOperator;
     subjectMatchMode?: SubjectMatchMode | null;
+    subjectMatchScope?: SubjectMatchScope | null;
   };
   message: ParsedMessage;
   logger: Logger;
@@ -86,18 +88,28 @@ export function explainRuleMatch({
       .map((part) => ({ part, bare: part.replace(REPLY_PREFIX, "") }))
       .filter(({ part, bare }) => bare !== part);
 
+    const scope = rule.subjectMatchScope;
+    const scopeNote =
+      scope === SubjectMatchScope.REPLIES
+        ? "This condition is scoped to replies, so a subject with no Re:/Fwd: marker is skipped before the pattern is compared."
+        : scope === SubjectMatchScope.ORIGINALS
+          ? "This condition is scoped to original messages, so any subject carrying a Re:/Fwd: marker is skipped before the pattern is compared."
+          : undefined;
+
     conditions.push({
       field: "subject",
       pattern: rule.subject,
-      normalization: stripped.length
-        ? `Reply prefixes are stripped from the pattern and the subject before comparing, so ${stripped
-            .map(({ part, bare }) => `"${part}" also matches "${bare}"`)
-            .join(
-              " and ",
-            )}. A pattern written to target replies will also match the original message.`
-        : parts.length > 1
-          ? `"||" splits this into ${parts.length} alternatives: ${parts.map((p) => `"${p}"`).join(", ")}. Any one matching is enough.`
-          : undefined,
+      normalization: scopeNote
+        ? scopeNote
+        : stripped.length
+          ? `Reply prefixes are stripped from the pattern and the subject before comparing, so ${stripped
+              .map(({ part, bare }) => `"${part}" also matches "${bare}"`)
+              .join(
+                " and ",
+              )}. A pattern written to target replies also matches the original message. To separate them, set that subject condition's scope to "replies only" or "originals only" in the rule editor.`
+          : parts.length > 1
+            ? `"||" splits this into ${parts.length} alternatives: ${parts.map((p) => `"${p}"`).join(", ")}. Any one matching is enough.`
+            : undefined,
     });
   }
 

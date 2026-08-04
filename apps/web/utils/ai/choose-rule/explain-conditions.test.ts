@@ -44,7 +44,32 @@ describe("explainRuleMatch", () => {
     expect(subject?.normalization).toContain(
       '"RE:Travel" also matches "Travel"',
     );
-    expect(result.summary).toContain("also match the original message");
+    expect(result.summary).toContain("also matches the original message");
+    // The explanation must name the fix, since this is the exact case where a
+    // reply landing on the original's rule looks like a misroute.
+    expect(result.summary).toContain("replies only");
+  });
+
+  it("reports a subject condition scoped to replies", () => {
+    const result = explainRuleMatch({
+      rule: {
+        ...baseRule,
+        name: "GM Responses",
+        subject: "Travel Rate",
+        subjectMatchScope: "REPLIES",
+      },
+      message: getMessage({
+        headers: getHeaders({
+          from: "chuck@gm.com",
+          subject: "Travel Rate",
+        }),
+      }),
+      logger,
+    });
+
+    const subject = result.conditions.find((c) => c.field === "subject");
+    expect(subject?.normalization).toContain("scoped to replies");
+    expect(result.staticMatched).toBe(false);
   });
 
   it("says the AI could not have chosen a rule whose static leg failed under AND", () => {
